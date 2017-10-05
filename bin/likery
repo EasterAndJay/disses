@@ -1,0 +1,21 @@
+#! /usr/bin/env ruby
+
+require 'optparse'
+require_relative '../lib/liker'
+
+ports  = (5000..(5000 + (ARGV.first || 1).to_i))
+likers = ports.map do |port|
+  liker = Liker.new(port, ports)
+  liker.run!
+  liker
+end
+
+Signal.trap("INT") do
+  likers.each do |liker|
+    liker.stop!
+  end
+end
+
+likers.each do |liker|
+  liker.wait
+end
