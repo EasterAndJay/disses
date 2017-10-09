@@ -12,6 +12,8 @@ class Liker
     @others = others.reject {|p| p == @port}
     @queue  = Array.new
 
+    @tasks  = Queue.new
+
     @myreq  = nil
     @await  = nil
 
@@ -21,7 +23,9 @@ class Liker
 
   def enqueue(message)
     @queue.push(message)
-    @queue.sort!
+    @queue.sort! do |a, b|
+      (a.time == b.time)? a.node <=> b.node : a.time <=> b.time
+    end
 
     # print "#{@port}: #{@queue.inspect}\n"
   end
@@ -43,28 +47,17 @@ class Liker
   end
 
   def listen!
-    @receiver = Thread.new do
+    @listener = Thread.new do
       print "Starting receiver #{@port}...\n"
       while @running
         begin
-          receive = @socket.recvfrom_nonblock(1024)
-          next if receive.first.empty?
-
-          message = Message.parse(receive.first)
-          @time   = [@time, message.time].max + 1
-          print "#{@port} <- #{message}\n"
-
-          case message.type
-          when 'request'
-            self.enqueue(message)
-            self.send('grant', message.from)
-          when 'grant'
-            next if message < @myreq
-            @await.delete(message.from)
-            self.like?
-          when 'release'
-            self.unqueue(message.from)
-            self.like?
+          if select([@socket], nil, nil, 0.1)
+            message = Message.parse(@socker.recv)
+            print "#{@port} <- #{message}\n"
+            @tasks.push(message)
+          else
+            sleep 0.1
+            next
           end
         rescue IO::WaitReadable
           # Everything is fine.
@@ -94,6 +87,7 @@ class Liker
   def run!
     @running = true
     self.listen!
+    self.work!
 
     @sender = Thread.new do
       print "Starting sender #{@port}...\n"
@@ -111,7 +105,8 @@ class Liker
 
   def send(type, *targets)
     targets.each do |target|
-      message = Message.new(type, @time, @port)
+      message = Request.new(type: 'huh', time: @time, node: @port)
+      # message = Message.new(type, @time, @port)
       print "#{@port} -> #{type} to #{target} at #{@time}\n"
       @socket.send(message.to_json, 0, '127.0.0.1', target)
     end
@@ -129,6 +124,40 @@ class Liker
 
   def wait
     @sender.join   if @sender
-    @receiver.join if @receiver
+    @listener.join if @listener
+    @worker.join   if @worker
+  end
+
+  def work!
+    @worker = Thread.new do
+      while @running
+        if @tasks.empty?
+          sleep 0.1
+          next
+        end
+
+        begin
+          message = @tasks.pop
+          @time   = [@time, message.time].max + 1
+
+          case(message.type)
+          when ''
+          when 'request'
+            self.enqueue(message)
+            self.send('grant', message.node)
+          when 'grant'
+            next if message < @myreq
+            @await.delete(message.node)
+            self.like?
+          when 'release'
+            self.unqueue(message.node)
+            self.like?
+          end
+        rescue => error
+          puts "#{@port}: #{error}"
+          puts error.backtrace
+        end
+      end
+    end
   end
 end

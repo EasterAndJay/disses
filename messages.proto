@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message Message {
+  string type = 1;
+  uint32 node = 2;
+  uint32 time = 3;
+}
