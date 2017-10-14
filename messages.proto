@@ -1,7 +1,14 @@
 syntax = "proto3";
 
 message Message {
-  string type = 1;
+  enum Type {
+    ENQUEUE     = 0;
+    REQUEST     = 1;
+    ACKNOWLEDGE = 2;
+    RELEASE     = 3;
+  }
+
+  Type   type = 1;
   uint32 node = 2;
   uint32 time = 3;
 }

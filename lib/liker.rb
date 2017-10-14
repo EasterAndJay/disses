@@ -1,5 +1,3 @@
-require 'json'
-require 'queue'
 require 'set'
 require 'socket'
 
@@ -15,23 +13,27 @@ class Liker
     @tasks  = Queue.new
 
     @myreq  = nil
-    @await  = nil
+    @await  = others.to_set
 
     @socket = UDPSocket.new
     @socket.bind('127.0.0.1', @port)
   end
 
+  def build(type)
+    Message.new({
+      type: Message::Type.resolve(type),
+      time: @time,
+      node: @port
+    })
+  end
+
   def enqueue(message)
     @queue.push(message)
-    @queue.sort! do |a, b|
-      (a.time == b.time)? a.node <=> b.node : a.time <=> b.time
-    end
-
-    # print "#{@port}: #{@queue.inspect}\n"
+    @queue.sort!
   end
 
   def like?
-    if @queue.first == @myreq and @await.empty?
+    if @myreq and @queue.first == @myreq and @await.empty?
       self.like! Random.rand(5) + 1
     end
   end
@@ -39,8 +41,8 @@ class Liker
   def like!(amount = 1)
     score = File.read('likes.int').to_i
     print "\e[32m#{@port} likes it this much: #{score}+#{amount}\e[0m\n"
-    File.write('likes.int', "#{score + amount}\n")
     sleep(Random.rand)
+    File.write('likes.int', "#{score + amount}\n")
     print "\e[31m#{@port} is done\e[0m\n"
   ensure
     self.release!
@@ -52,18 +54,14 @@ class Liker
       while @running
         begin
           if select([@socket], nil, nil, 0.1)
-            message = Message.parse(@socker.recv)
+            message = Message.decode_json(@socket.recv 1024)
             print "#{@port} <- #{message}\n"
             @tasks.push(message)
           else
             sleep 0.1
-            next
           end
-        rescue IO::WaitReadable
-          # Everything is fine.
         rescue => error
-          puts "#{@port}: #{error}"
-          puts error.backtrace
+          print "#{@port}: #{error}\n#{error.backtrace}\n"
         end
       end
     end
@@ -72,16 +70,16 @@ class Liker
   def release!
     @myreq = nil
     self.unqueue(@port)
-    self.send('release', *@others)
+    self.send(:RELEASE, *@others)
   end
 
   def request!
     return unless @myreq.nil?
-    @myreq = Message.new('request', @time, @port)
+    @myreq = self.build(:REQUEST)
     @await = @others.to_set
     self.enqueue(@myreq)
 
-    self.send('request', *@others)
+    self.send(@myreq, *@others)
   end
 
   def run!
@@ -93,22 +91,30 @@ class Liker
       print "Starting sender #{@port}...\n"
       while @running
         begin
-          sleep(Random.rand * 5)
-          self.request!
+          if Random.rand < 0.02
+            self.send(:ENQUEUE, @port)
+          end
+
+          sleep 0.1
         rescue => error
-          puts "#{@port}: #{error}"
-          puts error.backtrace
+          print "#{@port}: #{error}\n#{error.backtrace}\n"
         end
       end
     end
   end
 
-  def send(type, *targets)
+  def send(message, *targets)
+    unless message.is_a? Message
+      message = self.build(message)
+    end
+
     targets.each do |target|
-      message = Request.new(type: 'huh', time: @time, node: @port)
-      # message = Message.new(type, @time, @port)
-      print "#{@port} -> #{type} to #{target} at #{@time}\n"
       @socket.send(message.to_json, 0, '127.0.0.1', target)
+      print "#{@port} -> [%11s  to  %4d at %4d]\n" % [
+        message.type,
+        message.node,
+        message.time
+      ]
     end
   end
 
@@ -116,9 +122,9 @@ class Liker
     @running = false
   end
 
-  def unqueue(from)
+  def unqueue(node)
     @queue.reject! do |queued|
-      queued.from == from
+      queued.node == node
     end
   end
 
@@ -140,19 +146,23 @@ class Liker
           message = @tasks.pop
           @time   = [@time, message.time].max + 1
 
+          q = @queue.map {|m| "(#{m.node}@#{m.time})"}
+          print "#{@port} @: #{message}  #{q.join(' ')}\n"
+
           case(message.type)
-          when ''
-          when 'request'
+          when :ENQUEUE
+            self.request!
+          when :REQUEST
             self.enqueue(message)
-            self.send('grant', message.node)
-          when 'grant'
+            self.send(:ACKNOWLEDGE, message.node)
+          when :ACKNOWLEDGE
             next if message < @myreq
             @await.delete(message.node)
-            self.like?
-          when 'release'
+          when :RELEASE
             self.unqueue(message.node)
-            self.like?
           end
+
+          self.like?
         rescue => error
           puts "#{@port}: #{error}"
           puts error.backtrace
