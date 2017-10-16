@@ -1,15 +1,11 @@
 package lamport
 
-// import(
-// )
-type Queue []Message
+import(
+  "github.com/xavierholt/disses/lamport-mutex/go/message"
+)
 
-type Message struct {
-  MsgType int
-  Pid int
-  Clock int
-  Likes int
-}
+
+type Queue []Message
 
 func (q Queue) Len() int {
   return len(q)

@@ -3,7 +3,7 @@ package main
 import(
   "flag"
   "fmt"
-  "github.com/easterandjay/lamport/lamport"
+  "github.com/xavierholt/disses/lamport-mutex/go/lamport"
 )
 
 func main() {

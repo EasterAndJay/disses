@@ -8,7 +8,8 @@ message Message {
     RELEASE     = 3;
   }
 
-  Type   type = 1;
-  uint32 node = 2;
-  uint32 time = 3;
+  Type   msg_type = 1;
+  uint32 pid = 2;
+  uint32 clock = 3;
+  uint32 likes = 4;
 }
