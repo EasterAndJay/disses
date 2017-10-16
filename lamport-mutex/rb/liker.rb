@@ -70,7 +70,6 @@ class Liker
     puts error.backtrace
   end
 
-
   def like?
     if @myreq and @queue.first == @myreq and @await.empty?
       self.like! Random.rand(5) + 1
