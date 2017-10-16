@@ -7,7 +7,7 @@ File.write('likes.int', 0)
 ports  = (5000..(5000 + (ARGV.first || 1).to_i))
 likers = ports.map do |port|
   liker = Liker.new(port, ports)
-  liker.run!
+  liker.start!
   liker
 end
 

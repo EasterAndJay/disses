@@ -3,27 +3,29 @@ require 'socket'
 
 require_relative 'message'
 require_relative 'udpnetwork'
+require_relative 'worker'
 
-class Liker
+class Liker < Worker
   def initialize(port, others)
     @time   = 0
     @port   = port
     @others = others.reject {|p| p == @port}
 
-    @tasks  = Queue.new
-
     @myreq  = nil
     @await  = others.to_set
     @queue  = Array.new
 
+    super()
+    @tasks   = Queue.new
     @network = UDPNetwork.new(@tasks, @port)
+    self.subtask @network
 
-    @worker = Worker.new do
+    self.subtask do
       sleep 0.1 and next if @tasks.empty?
       self.handle(@tasks.pop)
     end
 
-    @sender = Worker.new do
+    self.subtask do
       if Random.rand < 0.02
         message = self.build(:ENQUEUE)
         @tasks.push(message)
@@ -64,13 +66,7 @@ class Liker
       self.unqueue(message.pid)
     end
 
-    self.like?
-  rescue => error
-    puts "#{@port}: #{error}"
-    puts error.backtrace
-  end
-
-  def like?
+    # If we control the mutex, go do stuff!
     if @myreq and @queue.first == @myreq and @await.empty?
       self.like! Random.rand(5) + 1
     end
@@ -99,12 +95,6 @@ class Liker
     self.enqueue(@myreq)
   end
 
-  def run!
-    @network.start!
-    @worker.start!
-    @sender.start!
-  end
-
   def send(message, *targets)
     unless message.is_a? Message
       message = self.build(message)
@@ -114,21 +104,9 @@ class Liker
     return message
   end
 
-  def stop!
-    @network.stop!
-    @worker.stop!
-    @sender.stop!
-  end
-
   def unqueue(pid)
     @queue.reject! do |queued|
       queued.pid == pid
     end
-  end
-
-  def wait!
-    @sender.wait!
-    @network.wait!
-    @worker.wait!
   end
 end
