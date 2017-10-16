@@ -1,7 +1,7 @@
 #! /usr/bin/env ruby
 
 require 'optparse'
-require_relative '../lib/liker'
+require_relative '../rb/liker'
 
 File.write('likes.int', 0)
 ports  = (5000..(5000 + (ARGV.first || 1).to_i))
