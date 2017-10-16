@@ -96,19 +96,13 @@ class Liker
     self.listen!
     self.work!
 
-    @sender = Thread.new do
-      print "Starting sender #{@port}...\n"
-      while @running
-        begin
-          if Random.rand < 0.02
-            self.send(:ENQUEUE, @port)
-          end
-
-          sleep 0.1
-        rescue => error
-          print "#{@port}: #{error}\n#{error.backtrace}\n"
-        end
+    print "Starting sender #{@port}...\n"
+    @sender = Worker.new do
+      if Random.rand < 0.02
+        self.send(:ENQUEUE, @port)
       end
+
+      sleep 0.1
     end
   end
 
@@ -119,19 +113,12 @@ class Liker
 
     @network.send(message)
     return message
-
-    targets.each do |target|
-      @socket.send(message.to_json, 0, '127.0.0.1', target)
-      print "#{@port} -> [%11s  to  %4d at %4d]\n" % [
-        message.type,
-        message.node,
-        message.time
-      ]
-    end
   end
 
   def stop!
     @running = false
+    @network.stop!
+    @worker.stop!
   end
 
   def unqueue(node)
