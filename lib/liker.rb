@@ -17,6 +17,15 @@ class Liker
 
     @socket = UDPSocket.new
     @socket.bind('127.0.0.1', @port)
+
+    @listener = WorkerBase.new do
+      ...
+    end
+
+
+    @worklook = WorkerBase.new do
+      #
+    end
   end
 
   def build(type)
@@ -107,6 +116,9 @@ class Liker
     unless message.is_a? Message
       message = self.build(message)
     end
+
+    @network.send(message)
+    return message
 
     targets.each do |target|
       @socket.send(message.to_json, 0, '127.0.0.1', target)
