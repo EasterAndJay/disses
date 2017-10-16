@@ -1,0 +1,10 @@
+#!/bin/bash
+
+CLIENT_COUNT=5
+
+go build main.go
+
+for ((i=0;i<$CLIENT_COUNT;i+=1))
+do
+	ttab ./main -n ${CLIENT_COUNT} -pid ${i}
+done
