@@ -12,11 +12,9 @@ likers = ports.map do |port|
 end
 
 Signal.trap("INT") do
-  likers.each do |liker|
-    liker.stop!
-  end
+  likers.each(&:stop!)
 end
 
 likers.each do |liker|
-  liker.wait
+  liker.wait!
 end

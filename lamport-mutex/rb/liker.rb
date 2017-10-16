@@ -2,34 +2,72 @@ require 'set'
 require 'socket'
 
 require_relative 'message'
+require_relative 'udpnetwork'
 
 class Liker
   def initialize(port, others)
     @time   = 0
     @port   = port
     @others = others.reject {|p| p == @port}
-    @queue  = Array.new
 
     @tasks  = Queue.new
 
     @myreq  = nil
     @await  = others.to_set
+    @queue  = Array.new
 
-    @socket = UDPSocket.new
-    @socket.bind('127.0.0.1', @port)
+    @network = UDPNetwork.new(@tasks, @port)
+
+    @worker = Worker.new do
+      sleep 0.1 and next if @tasks.empty?
+      self.handle(@tasks.pop)
+    end
+
+    @sender = Worker.new do
+      if Random.rand < 0.02
+        message = self.build(:ENQUEUE)
+        @tasks.push(message)
+      end
+
+      sleep 0.1
+    end
   end
 
   def build(type)
     Message.new({
-      type: Message::Type.resolve(type),
-      time: @time,
-      node: @port
+      msg_type: Message::Type.resolve(type),
+      clock:    @time,
+      pid:      @port
     })
   end
 
   def enqueue(message)
     @queue.push(message)
     @queue.sort!
+  end
+
+  def handle(message)
+    @time = [@time, message.clock].max + 1
+    q = @queue.map {|m| "(#{m.pid}@#{m.clock})"}
+    print "#{@port} @: #{message}  #{q.join(' ')}\n"
+
+    case(message.msg_type)
+    when :ENQUEUE
+      self.request!
+    when :REQUEST
+      self.enqueue(message)
+      self.send(:ACKNOWLEDGE, message.pid)
+    when :ACKNOWLEDGE
+      return if message < @myreq
+      @await.delete(message.pid)
+    when :RELEASE
+      self.unqueue(message.pid)
+    end
+
+    self.like?
+  rescue => error
+    puts "#{@port}: #{error}"
+    puts error.backtrace
   end
 
   def like?
@@ -48,25 +86,6 @@ class Liker
     self.release!
   end
 
-  def listen!
-    @listener = Thread.new do
-      print "Starting receiver #{@port}...\n"
-      while @running
-        begin
-          if select([@socket], nil, nil, 0.1)
-            message = Message.decode_json(@socket.recv 1024)
-            print "#{@port} <- #{message}\n"
-            @tasks.push(message)
-          else
-            sleep 0.1
-          end
-        rescue => error
-          print "#{@port}: #{error}\n#{error.backtrace}\n"
-        end
-      end
-    end
-  end
-
   def release!
     @myreq = nil
     self.unqueue(@port)
@@ -75,32 +94,15 @@ class Liker
 
   def request!
     return unless @myreq.nil?
-    @myreq = self.build(:REQUEST)
+    @myreq = self.send(:REQUEST, *@others)
     @await = @others.to_set
     self.enqueue(@myreq)
-
-    self.send(@myreq, *@others)
   end
 
   def run!
-    @running = true
-    self.listen!
-    self.work!
-
-    @sender = Thread.new do
-      print "Starting sender #{@port}...\n"
-      while @running
-        begin
-          if Random.rand < 0.02
-            self.send(:ENQUEUE, @port)
-          end
-
-          sleep 0.1
-        rescue => error
-          print "#{@port}: #{error}\n#{error.backtrace}\n"
-        end
-      end
-    end
+    @network.start!
+    @worker.start!
+    @sender.start!
   end
 
   def send(message, *targets)
@@ -108,66 +110,25 @@ class Liker
       message = self.build(message)
     end
 
-    targets.each do |target|
-      @socket.send(message.to_json, 0, '127.0.0.1', target)
-      print "#{@port} -> [%11s  to  %4d at %4d]\n" % [
-        message.type,
-        message.node,
-        message.time
-      ]
-    end
+    @network.send(message, *targets)
+    return message
   end
 
   def stop!
-    @running = false
+    @network.stop!
+    @worker.stop!
+    @sender.stop!
   end
 
-  def unqueue(node)
+  def unqueue(pid)
     @queue.reject! do |queued|
-      queued.node == node
+      queued.pid == pid
     end
   end
 
-  def wait
-    @sender.join   if @sender
-    @listener.join if @listener
-    @worker.join   if @worker
-  end
-
-  def work!
-    @worker = Thread.new do
-      while @running
-        if @tasks.empty?
-          sleep 0.1
-          next
-        end
-
-        begin
-          message = @tasks.pop
-          @time   = [@time, message.time].max + 1
-
-          q = @queue.map {|m| "(#{m.node}@#{m.time})"}
-          print "#{@port} @: #{message}  #{q.join(' ')}\n"
-
-          case(message.type)
-          when :ENQUEUE
-            self.request!
-          when :REQUEST
-            self.enqueue(message)
-            self.send(:ACKNOWLEDGE, message.node)
-          when :ACKNOWLEDGE
-            next if message < @myreq
-            @await.delete(message.node)
-          when :RELEASE
-            self.unqueue(message.node)
-          end
-
-          self.like?
-        rescue => error
-          puts "#{@port}: #{error}"
-          puts error.backtrace
-        end
-      end
-    end
+  def wait!
+    @sender.wait!
+    @network.wait!
+    @worker.wait!
   end
 end

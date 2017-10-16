@@ -1,21 +1,21 @@
-require_relative 'messages_pb'
+require_relative 'message_pb'
 
 class Message
   include Comparable
 
   def to_s
     "[%11s from %4d at %4d]" % [
-      self.type,
-      self.node,
-      self.time
+      self.msg_type,
+      self.pid,
+      self.clock
     ]
   end
 
   def <=> (other)
-    if self.time == other.time
-      self.node <=> other.node
+    if self.clock == other.clock
+      self.pid <=> other.pid
     else
-      self.time <=> other.time
+      self.clock <=> other.clock
     end
   end
 end
