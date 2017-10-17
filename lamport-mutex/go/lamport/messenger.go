@@ -1,7 +1,6 @@
 package lamport
 
 import(
-  "encoding/gob"
   "fmt"
   "math"
   "net"
@@ -12,11 +11,13 @@ import(
 )
 
 const (
-  ENQUEUE = iota
-  REQUEST
-  REPLY
-  RELEASE
+  ENQUEUE message.Message_Type = 0
+  REQUEST message.Message_Type = 1
+  REPLY   message.Message_Type = 2
+  RELEASE message.Message_Type = 3
 )
+
+
 
 type Messenger struct {
   pid int
@@ -29,21 +30,28 @@ type Messenger struct {
 }
 
 func (m *Messenger) SendMessage(msg message.Message, conn net.Conn) error {
-  encoder := gob.NewEncoder(conn)
-  m.UpdateClock(-1)
-  err := encoder.Encode(msg)
+  data, err := proto.Marshal(&msg)
   if err != nil {
+    fmt.Println(err)
+    return err
+  }
+  m.UpdateClock(0)
+  if _, err := conn.Write(data); err != nil {
     fmt.Println(err)
   }
   return err
 }
 
 func (m *Messenger) RecvMessage(conn net.Conn) (message.Message, error) {
-  msg := Message{}
-  decoder := gob.NewDecoder(conn)
-  err := decoder.Decode(&msg)
+  msg := message.Message{}
+  data := make([]byte, 1024)
+  n, err := conn.Read(data)
   if err != nil {
     fmt.Println(err)
+    return msg, err
+  }
+  if err := proto.Unmarshal(data[:n], &msg); err != nil {
+    fmt.Println("Receive: ", err)
     return msg, err
   }
   m.UpdateClock(msg.Clock)
@@ -51,18 +59,18 @@ func (m *Messenger) RecvMessage(conn net.Conn) (message.Message, error) {
 }
 
 func (m *Messenger) Reply(conn net.Conn) {
-  msg := message.Message{REPLY, m.pid, m.clock, -1}
+  msg := message.Message{REPLY, uint32(m.pid), uint32(m.clock), 0}
   m.SendMessage(msg, conn)
 }
 
 func (m *Messenger) Request(conn net.Conn) {
-  msg := message.Message{REQUEST, m.pid, m.clock, -1}
+  msg := message.Message{REQUEST, uint32(m.pid), uint32(m.clock), 0}
   m.Enqueue(msg)
   m.SendMessage(msg, conn)
 }
 
 func (m *Messenger) Release(conn net.Conn, likes int) {
-  msg := message.Message{RELEASE, m.pid, m.clock, likes}
+  msg := message.Message{RELEASE, uint32(m.pid), uint32(m.clock), uint32(likes)}
   m.queue = m.queue[1:]
   m.SendMessage(msg, conn)
 }
@@ -72,7 +80,7 @@ func (m *Messenger) Enqueue(msg message.Message) {
   sort.Sort(m.queue)
 }
 
-func (m *Messenger) UpdateClock(peerClock int) {
+func (m *Messenger) UpdateClock(peerClock uint32) {
   m.clock = int(math.Max(float64(m.clock), float64(peerClock))) + 1
   fmt.Printf("Client %d: Updated clock to %d\n", m.pid, m.clock)
 }
@@ -91,7 +99,7 @@ func (m *Messenger) ProcessMsg(senderPid int, conn net.Conn, likes *int) {
     case REPLY:
       fmt.Printf("Client %d: Reply Message received from Client %d\n", m.pid, senderPid)
       m.replyCount += 1
-      if m.replyCount == len(m.connections) && m.queue[0].Pid == m.pid {
+      if m.replyCount == len(m.connections) && m.queue[0].Pid == uint32(m.pid) {
         m.replyCount = 0
         m.likeLock <- 1
       }
@@ -101,7 +109,7 @@ func (m *Messenger) ProcessMsg(senderPid int, conn net.Conn, likes *int) {
       *likes += 1
       m.queue = m.queue[1:]
       fmt.Printf("New queue = %v, likes = %d\n", m.queue, *likes)
-      if m.replyCount == len(m.connections) && m.queue[0].Pid == m.pid {
+      if m.replyCount == len(m.connections) && m.queue[0].Pid == uint32(m.pid) {
         m.replyCount = 0
         m.likeLock <- 1
       }

@@ -6,7 +6,7 @@ import (
   "sync"
   "time"
 
-  _ "github.com/xavierholt/disses/lamport-mutex/go/message"
+  "github.com/xavierholt/disses/lamport-mutex/go/message"
 )
 
 type Client struct {
@@ -29,7 +29,7 @@ func NewClient(pid int, post string, n int) *Client {
       },
       0,
       0,
-      make(Queue, 0, n),
+      make(message.Queue, 0, n),
       make(chan int, 1),
     },
   }
