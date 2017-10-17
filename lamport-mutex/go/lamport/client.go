@@ -2,6 +2,7 @@ package lamport
 
 import (
   "fmt"
+  "math/rand"
   "net"
   "sync"
   "time"
@@ -44,7 +45,8 @@ func (c *Client) Run(n int) {
   go c.RecvMsgs()
   for {
     // fmt.Printf("Client %d: Post content -  %s | LIKE count: %d\n", c.pid, c.post, c.likes)
-    time.Sleep(time.Second * 5)
+    r := rand.Intn(5000)
+    time.Sleep(time.Millisecond * time.Duration(r))
     c.Like()
   }
 }

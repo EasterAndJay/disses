@@ -94,7 +94,9 @@ func (m *Messenger) ProcessMsg(senderPid int, conn net.Conn, likes *int) {
     switch msg.MsgType {
     case REQUEST:
       fmt.Printf("Client %d: Request Message received from Client %d\n", m.pid, senderPid)
+      fmt.Printf("Old queue = %v, likes = %d\n", m.queue, *likes)
       m.Enqueue(msg)
+      fmt.Printf("New queue = %v, likes = %d\n", m.queue, *likes)
       m.Reply(conn)
     case REPLY:
       fmt.Printf("Client %d: Reply Message received from Client %d\n", m.pid, senderPid)
