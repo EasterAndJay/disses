@@ -1,9 +1,4 @@
-package lamport
-
-import(
-  "github.com/xavierholt/disses/lamport-mutex/go/message"
-)
-
+package message
 
 type Queue []Message
 

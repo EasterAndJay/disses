@@ -5,11 +5,15 @@ import(
   "fmt"
   "math"
   "net"
+  proto "github.com/golang/protobuf/proto"
   "sort"
+
+  "github.com/xavierholt/disses/lamport-mutex/go/message"
 )
 
 const (
-  REQUEST = iota
+  ENQUEUE = iota
+  REQUEST
   REPLY
   RELEASE
 )
@@ -20,11 +24,11 @@ type Messenger struct {
   clock int
   replyCount int
 
-  queue Queue
+  queue message.Queue
   likeLock chan int
 }
 
-func (m *Messenger) SendMessage(msg Message, conn net.Conn) error {
+func (m *Messenger) SendMessage(msg message.Message, conn net.Conn) error {
   encoder := gob.NewEncoder(conn)
   m.UpdateClock(-1)
   err := encoder.Encode(msg)
@@ -34,7 +38,7 @@ func (m *Messenger) SendMessage(msg Message, conn net.Conn) error {
   return err
 }
 
-func (m *Messenger) RecvMessage(conn net.Conn) (Message, error) {
+func (m *Messenger) RecvMessage(conn net.Conn) (message.Message, error) {
   msg := Message{}
   decoder := gob.NewDecoder(conn)
   err := decoder.Decode(&msg)
@@ -47,23 +51,23 @@ func (m *Messenger) RecvMessage(conn net.Conn) (Message, error) {
 }
 
 func (m *Messenger) Reply(conn net.Conn) {
-  msg := Message{REPLY, m.pid, m.clock, -1}
+  msg := message.Message{REPLY, m.pid, m.clock, -1}
   m.SendMessage(msg, conn)
 }
 
 func (m *Messenger) Request(conn net.Conn) {
-  msg := Message{REQUEST, m.pid, m.clock, -1}
+  msg := message.Message{REQUEST, m.pid, m.clock, -1}
   m.Enqueue(msg)
   m.SendMessage(msg, conn)
 }
 
 func (m *Messenger) Release(conn net.Conn, likes int) {
-  msg := Message{RELEASE, m.pid, m.clock, likes}
+  msg := message.Message{RELEASE, m.pid, m.clock, likes}
   m.queue = m.queue[1:]
   m.SendMessage(msg, conn)
 }
 
-func (m *Messenger) Enqueue(msg Message) {
+func (m *Messenger) Enqueue(msg message.Message) {
   m.queue = append(m.queue, msg)
   sort.Sort(m.queue)
 }

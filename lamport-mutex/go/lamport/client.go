@@ -5,6 +5,8 @@ import (
   "net"
   "sync"
   "time"
+
+  _ "github.com/xavierholt/disses/lamport-mutex/go/message"
 )
 
 type Client struct {
