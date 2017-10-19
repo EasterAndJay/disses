@@ -7,7 +7,7 @@ require_relative 'udpnetwork'
 require_relative 'worker'
 
 class Liker < Worker
-  def initialize(port, others)
+  def initialize(port, others, options = {})
     @time   = 0
     @port   = port
     @others = others.reject {|p| p == @port}
@@ -18,7 +18,15 @@ class Liker < Worker
 
     super()
     @tasks   = Queue.new
-    @network = TCPNetwork.new(@tasks, @port)
+    @network = case(options[:net])
+    when :tcp
+      TCPNetwork.new(@tasks, @port)
+    when :udp
+      UDPNetwork.new(@tasks, @port)
+    else
+      raise 'Unknown protocol!'
+    end
+
     self.subtask @network
 
     self.subtask do
@@ -96,7 +104,8 @@ class Liker < Worker
     self.enqueue(@myreq)
   end
 
-  def send(message, *targets)
+  def send(type, *targets)
+    message = self.build(type)
     @network.send(message, *targets)
     return message
   end

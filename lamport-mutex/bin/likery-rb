@@ -3,10 +3,22 @@
 require 'optparse'
 require_relative '../rb/liker'
 
+ports = (5001..5003)
+proto = :udp
+
+OptionParser.new do |args|
+  args.on('--udp') {proto = :udp}
+  args.on('--tcp') {proto = :tcp}
+end.parse!
+
+unless ARGV.empty?
+  n = 5000 + Integer(ARGV.first)
+  ports = (5001..n)
+end
+
 File.write('likes.int', 0)
-ports  = (5001..(5000 + (ARGV.first || 3).to_i))
 likers = ports.map do |port|
-  liker = Liker.new(port, ports)
+  liker = Liker.new(port, ports, net: proto)
   liker.start!
   liker
 end
