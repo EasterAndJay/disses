@@ -44,7 +44,7 @@ func (c *Client) Run(n int) {
   fmt.Printf("Client %d: Connected to all other peers\n", c.pid)
   go c.RecvMsgs()
   for {
-    // fmt.Printf("Client %d: Post content -  %s | LIKE count: %d\n", c.pid, c.post, c.likes)
+    fmt.Printf("Client %d: Post content - %s | LIKE count: %d\n", c.pid, c.post, c.likes)
     r := rand.Intn(5000)
     time.Sleep(time.Millisecond * time.Duration(r))
     c.Like()

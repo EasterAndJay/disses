@@ -11,6 +11,6 @@ func main() {
   pid := flag.Int("pid", -1, "The pid of this client")
   flag.Parse()
   fmt.Printf("Client %d: Spawning\n", *pid)
-  c := lamport.NewClient(*pid, "The post content HERE", *n)
+  c := lamport.NewClient(*pid, "TESTCASE CONTENT", *n)
   c.Run(*n)
 }
