@@ -2,6 +2,7 @@ require 'set'
 require 'socket'
 
 require_relative 'message'
+require_relative 'tcpnetwork'
 require_relative 'udpnetwork'
 require_relative 'worker'
 
@@ -17,7 +18,7 @@ class Liker < Worker
 
     super()
     @tasks   = Queue.new
-    @network = UDPNetwork.new(@tasks, @port)
+    @network = TCPNetwork.new(@tasks, @port)
     self.subtask @network
 
     self.subtask do
