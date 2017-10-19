@@ -23,15 +23,12 @@ class TCPNetwork < Worker
       end
     end
 
-    print "#{@port} << Ready to accept connections.\n"
-    self.start!
-
     self.subtask do
       clients = select(@clients.values, nil, nil, 0.1)
       next if clients.nil?
 
       clients[0].each do |client|
-        data = client.gets or next
+        data = client.gets
         next if data.nil?
 
         message = Message.decode_json(data)

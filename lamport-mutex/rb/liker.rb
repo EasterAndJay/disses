@@ -97,10 +97,6 @@ class Liker < Worker
   end
 
   def send(message, *targets)
-    unless message.is_a? Message
-      message = self.build(message)
-    end
-
     @network.send(message, *targets)
     return message
   end
