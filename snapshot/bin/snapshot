@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require_relative '../client'
+
+opts = Hash.new
+
+OptionParser.new do |args|
+  args.on('-nNUM')   { |n| opts[:n] = n.to_i }
+  args.on('-pPID') { |pid| opts[:pid] = pid.to_i }
+end.parse!
+
+client = Client.new(pid: opts[:pid], network_size: opts[:n])
+client.run!
+
+# Signal.trap("INT") do
+#   clients.each(&:stop!)
+# end
+
