@@ -1,45 +1,14 @@
 require_relative 'message'
-require_relative 'worker'
 
-class TCPNetwork < Worker
+class TCPNetwork
   def initialize(queue, port)
     @socket  = TCPServer.new('127.0.0.1', port)
     @clients = Hash.new
+    @queue   = queue
     @port    = port
-
-    super() do
-      begin
-        client = @socket.accept_nonblock
-        port   = client.gets.to_i
-        if @clients.include? port
-          print "#{@port} XX Already connected to #{port}.\n"
-          client.close
-        else
-          @clients[port] = client
-        end
-      rescue IO::WaitReadable
-        # Everything is fine.
-        sleep 0.1
-      end
-    end
-
-    self.subtask do
-      clients = select(@clients.values, nil, nil, 0.1)
-      next if clients.nil?
-
-      clients[0].each do |client|
-        data = client.gets
-        next if data.nil?
-
-        message = Message.decode_json(data)
-        print "#{@port} <- #{message}\n"
-        queue.push(message)
-      end
-    end
   end
 
   def client(port)
-    return unless @active
     @clients[port] ||= begin
       client = TCPSocket.open('127.0.0.1', port)
       client.puts @port
@@ -48,6 +17,35 @@ class TCPNetwork < Worker
   rescue
     sleep 0.1
     retry
+  end
+
+  def serve
+    client = @socket.accept_nonblock
+    port   = client.gets.to_i
+    puts "Connection from #{port}"
+    if @clients.include? port
+      print "#{@port} XX Already connected to #{port}.\n"
+      client.close
+    else
+      @clients[port] = client
+    end
+  rescue IO::WaitReadable
+    # Everything is fine.
+    sleep 0.1
+  end
+
+  def recv
+    clients = select(@clients.values, nil, nil, 0.1)
+    return if clients.nil?
+
+    clients[0].each do |client|
+      data = client.gets
+      next if data.nil?
+
+      message = Message.decode_json(data)
+      print "#{@port} <- #{message}\n"
+      @queue.push(message)
+    end
   end
 
   def send(message, *targets)

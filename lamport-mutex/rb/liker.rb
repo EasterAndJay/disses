@@ -4,9 +4,9 @@ require 'socket'
 require_relative 'message'
 require_relative 'tcpnetwork'
 require_relative 'udpnetwork'
-require_relative 'worker'
+require_relative 'workshop'
 
-class Liker < Worker
+class Liker
   def initialize(port, others, options = {})
     @time   = 0
     @port   = port
@@ -16,26 +16,29 @@ class Liker < Worker
     @await  = others.to_set
     @queue  = Array.new
 
-    super()
+
     @tasks   = Queue.new
-    @network = case(options[:protocol])
+    @workers = Workshop.new
+
+    case(options[:protocol])
     when :tcp
-      TCPNetwork.new(@tasks, @port)
+      @network = TCPNetwork.new(@tasks, @port)
+      @workers.loop {@network.serve}
+      @workers.loop {@network.recv}
     when :udp
-      UDPNetwork.new(@tasks, @port)
+      @network = UDPNetwork.new(@tasks, @port)
+      @workers.loop {@network.recv}
     else
       raise 'Unknown protocol!'
     end
 
-    self.subtask @network
-
-    self.subtask do
+    @workers.loop do
       sleep 0.1 and next if @tasks.empty?
       self.handle(@tasks.pop)
     end
 
     unless options[:manual]
-      self.subtask do
+      @workers.loop do
         if Random.rand < 0.02
           message = self.build(:ENQUEUE)
           @tasks.push(message)
@@ -112,9 +115,21 @@ class Liker < Worker
     return message
   end
 
+  def start!
+    @workers.start!
+  end
+
+  def stop!
+    @workers.stop!
+  end
+
   def unqueue(pid)
     @queue.reject! do |queued|
       queued.pid == pid
     end
+  end
+
+  def wait!
+    @workers.wait!
   end
 end
