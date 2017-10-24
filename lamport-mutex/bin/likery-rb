@@ -4,11 +4,15 @@ require 'optparse'
 require_relative '../rb/liker'
 
 ports = (5001..5003)
-proto = :udp
+opts  = {
+  :protocol => :udp,
+  :manual   => false
+}
 
 OptionParser.new do |args|
-  args.on('--udp') {proto = :udp}
-  args.on('--tcp') {proto = :tcp}
+  args.on('--manual') {opts[:manual]   = true}
+  args.on('--udp')    {opts[:protocol] = :udp}
+  args.on('--tcp')    {opts[:protocol] = :tcp}
 end.parse!
 
 unless ARGV.empty?
@@ -18,7 +22,7 @@ end
 
 File.write('likes.int', 0)
 likers = ports.map do |port|
-  liker = Liker.new(port, ports, net: proto)
+  liker = Liker.new(port, ports, opts)
   liker.start!
   liker
 end

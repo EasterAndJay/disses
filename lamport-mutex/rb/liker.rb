@@ -18,7 +18,7 @@ class Liker < Worker
 
     super()
     @tasks   = Queue.new
-    @network = case(options[:net])
+    @network = case(options[:protocol])
     when :tcp
       TCPNetwork.new(@tasks, @port)
     when :udp
@@ -34,13 +34,15 @@ class Liker < Worker
       self.handle(@tasks.pop)
     end
 
-    self.subtask do
-      if Random.rand < 0.02
-        message = self.build(:ENQUEUE)
-        @tasks.push(message)
-      end
+    unless options[:manual]
+      self.subtask do
+        if Random.rand < 0.02
+          message = self.build(:ENQUEUE)
+          @tasks.push(message)
+        end
 
-      sleep 0.1
+        sleep 0.1
+      end
     end
   end
 

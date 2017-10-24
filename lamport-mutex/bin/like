@@ -1,0 +1,15 @@
+#! /usr/bin/env ruby
+
+require 'socket'
+require_relative '../rb/message'
+require_relative '../rb/liker'
+
+port    = ARGV[0].to_i
+socket  = UDPSocket.new
+message = Message.new({
+  msg_type: Message::Type.resolve(:ENQUEUE),
+  clock: 0
+})
+
+socket.send(message.to_json, 0, '127.0.0.1', port)
+socket.close
