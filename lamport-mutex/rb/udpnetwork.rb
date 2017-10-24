@@ -1,18 +1,18 @@
 require_relative 'message'
-require_relative 'worker'
 
-class UDPNetwork < Worker
+class UDPNetwork
   def initialize(queue, port)
     @socket = UDPSocket.new
     @socket.bind('127.0.0.1', port)
+    @queue = queue
+    @port  = port
+  end
 
-    super() do
-      if select([@socket], nil, nil, 0.1)
-        message = Message.decode_json(@socket.recv(1024))
-        print "#{port} <- #{message}\n"
-        queue.push(message)
-      end
-    end
+  def recv
+    return unless select([@socket], nil, nil, 0.1)
+    message = Message.decode_json(@socket.recv(1024))
+    print "#{@port} <- #{message}\n"
+    @queue.push(message)
   end
 
   def send(message, *targets)
