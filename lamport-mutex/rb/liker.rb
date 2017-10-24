@@ -2,11 +2,12 @@ require 'set'
 require 'socket'
 
 require_relative 'message'
+require_relative 'tcpnetwork'
 require_relative 'udpnetwork'
 require_relative 'worker'
 
 class Liker < Worker
-  def initialize(port, others)
+  def initialize(port, others, options = {})
     @time   = 0
     @port   = port
     @others = others.reject {|p| p == @port}
@@ -17,7 +18,15 @@ class Liker < Worker
 
     super()
     @tasks   = Queue.new
-    @network = UDPNetwork.new(@tasks, @port)
+    @network = case(options[:protocol])
+    when :tcp
+      TCPNetwork.new(@tasks, @port)
+    when :udp
+      UDPNetwork.new(@tasks, @port)
+    else
+      raise 'Unknown protocol!'
+    end
+
     self.subtask @network
 
     self.subtask do
@@ -25,13 +34,15 @@ class Liker < Worker
       self.handle(@tasks.pop)
     end
 
-    self.subtask do
-      if Random.rand < 0.02
-        message = self.build(:ENQUEUE)
-        @tasks.push(message)
-      end
+    unless options[:manual]
+      self.subtask do
+        if Random.rand < 0.02
+          message = self.build(:ENQUEUE)
+          @tasks.push(message)
+        end
 
-      sleep 0.1
+        sleep 0.1
+      end
     end
   end
 
@@ -95,11 +106,8 @@ class Liker < Worker
     self.enqueue(@myreq)
   end
 
-  def send(message, *targets)
-    unless message.is_a? Message
-      message = self.build(message)
-    end
-
+  def send(type, *targets)
+    message = self.build(type)
     @network.send(message, *targets)
     return message
   end
