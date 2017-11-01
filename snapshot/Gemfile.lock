@@ -1,0 +1,17 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    concurrent-ruby (1.0.5)
+    concurrent-ruby-ext (1.0.5)
+      concurrent-ruby (= 1.0.5)
+    google-protobuf (3.4.1.1)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  concurrent-ruby-ext
+  google-protobuf
+
+BUNDLED WITH
+   1.15.4

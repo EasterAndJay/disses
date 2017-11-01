@@ -5,8 +5,9 @@ BASE_PORT = 5000
 
 class Connector
 
+  attr_reader :pid, :peers
+
   def initialize(peers:, pid:, peer_count:)
-    @peers_lock = Mutex.new
     @peers = peers
     @peer_count = peer_count
 
@@ -52,13 +53,11 @@ class Connector
   end
 
   def add_peer(peer, peer_pid)
-    @peers_lock.synchronize do
-      if @peers.length < @peer_count && !@peers.key?(peer_pid)
-        p "Client #{@pid}: Connected to client #{peer_pid}"
-        @peers[peer_pid] = peer
-      else
-        peer.close
-      end
+    if @peers.length < @peer_count && !@peers.key?(peer_pid)
+      p "Client #{@pid}: Connected to client #{peer_pid}"
+      @peers[peer_pid] = peer
+    else
+      peer.close
     end
   end
 
