@@ -1,5 +1,6 @@
 require 'socket'
 require 'thread'
+require 'concurrent'
 
 BASE_PORT = 5000
 
@@ -7,8 +8,8 @@ class Connector
 
   attr_reader :pid, :peers
 
-  def initialize(peers:, pid:, peer_count:)
-    @peers = peers
+  def initialize(pid:, peer_count:)
+    @peers = Concurrent::Hash.new
     @peer_count = peer_count
 
     @pid = pid
@@ -55,7 +56,9 @@ class Connector
   def add_peer(peer, peer_pid)
     if @peers.length < @peer_count && !@peers.key?(peer_pid)
       p "Client #{@pid}: Connected to client #{peer_pid}"
-      @peers[peer_pid] = peer
+      @peers[peer_pid] = Concurrent::Hash.new conn: peer,
+                                              tracking: false,
+                                              channel_state: Concurrent::Array.new
     else
       peer.close
     end
