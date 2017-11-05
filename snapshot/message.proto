@@ -8,4 +8,6 @@ message Message {
 
   Type   msg_type = 1;
   uint32 amount   = 2;
+  uint32 ppid     = 3;
+  string ssid     = 4;
 }

@@ -1,11 +1,14 @@
+require 'securerandom'
 require 'thread'
 
 require_relative './connector'
 require_relative './messenger'
+require_relative './snapshot'
 
 class Client
 
   attr_reader :pid
+  attr_reader :tasks
 
   def initialize(pid:, network_size:)
     @pid = pid
@@ -15,8 +18,37 @@ class Client
     @balance_lock = Mutex.new
     @balance = 1000
 
-    @marker_signal = ConditionVariable.new
-    @markers = 0
+    @tasks = Queue.new
+    @snaps = Hash.new
+
+    Thread.new do
+      loop {handle @tasks.pop}
+    end
+  end
+
+  def balance
+    @balance_lock.synchronize do
+      return @balance
+    end
+  end
+
+  def handle(message)
+    case message.msg_type
+    when :MARKER
+      self.snapshot! message
+    when :TRANSFER
+      self.rebalance! message
+    else
+      self.log "unknown message type: '#{message.msg_type}'"
+    end
+
+    @snaps.reject! do |id, snap|
+      snap.handle(message)
+      print snap if snap.done?
+      snap.done?
+    end
+  rescue Exception => e
+    self.log e
   end
 
   def log(message)
@@ -27,31 +59,66 @@ class Client
     end
   end
 
+  def rebalance!(message)
+    self.log "got $#{message.amount} from client #{message.ppid}"
+    @balance_lock.synchronize do
+      @balance += message.amount
+    end
+
+    self.log "now has $#{@balance}"
+  end
+
   def run!
     @connector.init_connections!
-    log "connected to all other peers"
+    self.log "connected to all other peers"
 
     @messenger = Messenger.new(self, peers: peers)
     Thread.new{ @messenger.send_and_recv! }
+
     loop do
-      snapshot! if gets.chomp == "snapshot"
+      # snapshot! if gets.chomp == "snapshot"
+      sleep rand * 30
+      self.tasks.push Message.new({
+        msg_type: Message::Type.resolve(:MARKER),
+        ssid: SecureRandom.uuid,
+        ppid: self.pid
+      })
     end
   end
 
-  def snapshot!
-    log "nitiating snapshot"
+  def snapshot!(message)
+    if @snaps.include? message.ssid
+      return
+    end
 
-    @balance_lock.synchronize {
-      state = @balance
+    self.log "taking snapshot #{message.ssid}"
+    @snaps[message.ssid] = Snapshot.new(self, message, peers.keys)
+    Thread.new do
+      sleep rand * 5
       peers.each do |pid, peer|
-        @messenger.send_marker(peer)
-        # TODO: Save state on every channel
+        peer.puts(Message.new({
+          msg_type: Message::Type.resolve(:MARKER),
+          ssid: message.ssid,
+          ppid: self.pid
+        }).to_json)
       end
-      @marker_signal.wait(@balance_lock)
-    }
-    p "Client #{@connector.pid}: State of snapshot"
-    p "Balance = $#{@balance}"
-    p "Channels: #{@channel_states}"
+    end
+  end
+
+  def transfer!(pid)
+    amount = rand(9) + 1
+    @balance_lock.synchronize do
+      @balance -= amount
+    end
+
+    self.log "sending $#{amount} to client #{pid}"
+    peers[pid].puts(Message.new({
+      msg_type: Message::Type.resolve(:TRANSFER),
+      amount:   amount,
+      ppid:     self.pid
+    }).to_json)
+  rescue Exception => e
+    self.log e
   end
 
   private
