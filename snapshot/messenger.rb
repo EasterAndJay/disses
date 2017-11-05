@@ -9,7 +9,7 @@ class Messenger
 
   def send_and_recv!
     recv_threads = @peers.map{ |pid, peer| Thread.new { recv_msgs(pid, peer) }}
-    send_threads = @peers.map{ |pid, peer| Thread.new { send_msgs(peer) }}
+    send_threads = @peers.map{ |pid, peer| Thread.new { send_msgs(pid, peer) }}
     recv_threads.each{ |t| t.join }
     send_threads.each{ |t| t.join }
   end
@@ -22,8 +22,10 @@ class Messenger
         msg = Message.decode_json(data)
         case msg.msg_type
         when :TRANSFER
+          @client.log "got $#{msg.amount} from client #{pid}"
           handle_transfer(msg.amount)
         when :MARKER
+          @client.log "got a MARKER from client #{pid}"
           handle_marker(pid, peer)
         end
       rescue Exception => e
@@ -40,10 +42,12 @@ class Messenger
     # TODO
   end
 
-  def send_msgs(peer)
+  def send_msgs(pid, peer)
     loop do
       begin
-        send_transfer(peer, 10) if rand <= 0.2
+        amount = rand(9) + 1
+        @client.log "sending $#{amount} to client #{pid}"
+        send_transfer(peer, amount)
       rescue Exception => e
         @client.log e
       end
