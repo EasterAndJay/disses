@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-package message;
-
 message Message {
   enum Type {
     TRANSFER     = 0;

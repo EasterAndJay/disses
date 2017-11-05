@@ -21,9 +21,9 @@ class Messenger
         next if data.nil?
         msg = Message.decode_json(data)
         case msg.msg_type
-        when Message::Type.resolve(:TRANSFER)
+        when :TRANSFER
           handle_transfer(msg.amount)
-        when Message::Type.resolve(:MARKER)
+        when :MARKER
           handle_marker(pid, peer)
         end
       rescue Exception => e
