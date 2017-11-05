@@ -8,12 +8,13 @@ class Connector
 
   attr_reader :pid, :peers
 
-  def initialize(pid:, peer_count:)
+  def initialize(client, peer_count:)
+    @client = client
     @peers = Concurrent::Hash.new
     @peer_count = peer_count
 
-    @pid = pid
-    @port = pid + BASE_PORT
+    @pid  = client.pid
+    @port = @pid + BASE_PORT
   end
 
   def init_connections!
@@ -34,8 +35,11 @@ class Connector
         peer = TCPSocket.open("localhost", peer_port)
         peer.puts(@pid)
         add_peer(peer, peer_pid)
+      rescue Errno::ECONNREFUSED
+        sleep rand
       rescue Exception => e
-        sleep 1
+        @client.log e
+        sleep rand
       end
     end
   end
@@ -47,7 +51,11 @@ class Connector
         peer = server.accept_nonblock
         peer_pid = peer.gets.to_i
         add_peer(peer, peer_pid)
-      rescue
+      rescue Errno::EWOULDBLOCK
+        # Everything is fine.
+        sleep rand
+      rescue Exception => e
+        @client.log e
       end
     end
     server.close
@@ -55,10 +63,8 @@ class Connector
 
   def add_peer(peer, peer_pid)
     if @peers.length < @peer_count && !@peers.key?(peer_pid)
-      p "Client #{@pid}: Connected to client #{peer_pid}"
-      @peers[peer_pid] = Concurrent::Hash.new conn: peer,
-                                              tracking: false,
-                                              channel_state: Concurrent::Array.new
+      @client.log "connected to client #{peer_pid}"
+      @peers[peer_pid] = peer
     else
       peer.close
     end

@@ -2,8 +2,9 @@ require_relative 'message_pb'
 
 class Messenger
 
-  def initialize(peers:)
-    @peers = peers
+  def initialize(client, peers:)
+    @client = client
+    @peers  = peers
   end
 
   def send_and_recv!
@@ -15,14 +16,18 @@ class Messenger
 
   def recv_msgs(pid, peer)
     loop do
-      data = peer.conn.gets
-      next if data.nil?
-      msg = Message.decode_json(data)
-      case msg.msg_type
-      when Message::Type.resolve(:TRANSFER)
-        handle_transfer(msg.amount)
-      when Message::Type.resolve(:MARKER)
-        handle_marker(pid, peer)
+      begin
+        data = peer.gets
+        next if data.nil?
+        msg = Message.decode_json(data)
+        case msg.msg_type
+        when Message::Type.resolve(:TRANSFER)
+          handle_transfer(msg.amount)
+        when Message::Type.resolve(:MARKER)
+          handle_marker(pid, peer)
+        end
+      rescue Exception => e
+        @client.log e
       end
     end
   end
@@ -37,8 +42,13 @@ class Messenger
 
   def send_msgs(peer)
     loop do
-      send_transfer(peer, 10) if rand <= 0.2
-      sleep 10
+      begin
+        send_transfer(peer, 10) if rand <= 0.2
+      rescue Exception => e
+        @client.log e
+      end
+
+      sleep rand * 5
     end
   end
 
@@ -47,7 +57,7 @@ class Messenger
       msg_type: Message::Type.resolve(type),
       amount:   amount
     })
-    peer.conn.puts(msg.to_json)
+    peer.puts(msg.to_json)
   end
 
   def send_transfer(peer, amount)
@@ -58,6 +68,5 @@ class Messenger
   def send_marker(peer)
     send_message(peer, :MARKER, 0)
   end
-
 
 end

@@ -3,17 +3,26 @@
 require 'optparse'
 require_relative '../client'
 
-opts = Hash.new
+pid  = nil
+num  = 3
 
 OptionParser.new do |args|
-  args.on('-nNUM')   { |n| opts[:n] = n.to_i }
-  args.on('-pPID') { |pid| opts[:pid] = pid.to_i }
+  args.on('-nNUM') { |n| num = n.to_i }
+  args.on('-pPID') { |p| pid = p.to_i }
 end.parse!
 
-client = Client.new(pid: opts[:pid], network_size: opts[:n])
-client.run!
+if pid.nil?
+  threads = (1..num).map do |pid|
+    Thread.new do
+      client = Client.new(pid: pid, network_size: num)
+      client.run!
+    end
+  end
 
-# Signal.trap("INT") do
-#   clients.each(&:stop!)
-# end
-
+  threads.each do |thread|
+    thread.join
+  end
+else
+  client = Client.new(pid: pid, network_size: num)
+  client.run!
+end

@@ -5,8 +5,11 @@ require_relative './messenger'
 
 class Client
 
+  attr_reader :pid
+
   def initialize(pid:, network_size:)
-    @connector = Connector.new(pid: pid, peer_count: network_size - 1)
+    @pid = pid
+    @connector = Connector.new(self, peer_count: network_size - 1)
     @messenger = nil
 
     @balance_lock = Mutex.new
@@ -14,13 +17,21 @@ class Client
 
     @marker_signal = ConditionVariable.new
     @markers = 0
+  end
 
+  def log(message)
+    if message.is_a? Exception
+      print "Client #{@pid}:  #{message}\n  #{message.backtrace.join("\n  ")}\n"
+    else
+      print "Client #{@pid}:  #{message}\n"
+    end
   end
 
   def run!
     @connector.init_connections!
-    p "Client #{@connector.pid}: Connected to all other peers"
-    @messenger = Messenger.new(peers: peers)
+    log "connected to all other peers"
+
+    @messenger = Messenger.new(self, peers: peers)
     Thread.new{ @messenger.send_and_recv! }
     loop do
       snapshot! if gets.chomp == "snapshot"
@@ -28,7 +39,8 @@ class Client
   end
 
   def snapshot!
-    p "Client #{@connector.pid}: Initiating snapshot"
+    log "nitiating snapshot"
+
     @balance_lock.synchronize {
       state = @balance
       peers.each do |pid, peer|
