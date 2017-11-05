@@ -43,6 +43,6 @@ class Snapshot
       result << "\n"
     end
 
-    result
+    result << "\n"
   end
 end

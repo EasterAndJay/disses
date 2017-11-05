@@ -7,6 +7,7 @@ require_relative './snapshot'
 
 class Client
 
+  attr_reader :balance
   attr_reader :pid
   attr_reader :tasks
 
@@ -23,12 +24,6 @@ class Client
 
     Thread.new do
       loop {handle @tasks.pop}
-    end
-  end
-
-  def balance
-    @balance_lock.synchronize do
-      return @balance
     end
   end
 
@@ -91,14 +86,18 @@ class Client
       return
     end
 
-    self.log "taking snapshot #{message.ssid}"
-    @snaps[message.ssid] = Snapshot.new(self, message, peers.keys)
-    peers.each do |pid, peer|
-      peer.puts(Message.new({
-        msg_type: Message::Type.resolve(:MARKER),
-        ssid: message.ssid,
-        ppid: self.pid
-      }).to_json)
+    @balance_lock.synchronize do
+      self.log "taking snapshot #{message.ssid}"
+      @snaps[message.ssid] = Snapshot.new(self, message, peers.keys)
+      sleep rand # Let some messages build up!
+
+      peers.each do |pid, peer|
+        peer.print(Message.new({
+          msg_type: Message::Type.resolve(:MARKER),
+          ssid: message.ssid,
+          ppid: self.pid
+        }).to_json << "\n")
+      end
     end
   end
 
@@ -109,11 +108,11 @@ class Client
     end
 
     self.log "sending $#{amount} to client #{pid}"
-    peers[pid].puts(Message.new({
+    peers[pid].print(Message.new({
       msg_type: Message::Type.resolve(:TRANSFER),
       amount:   amount,
       ppid:     self.pid
-    }).to_json)
+    }).to_json << "\n")
   rescue Exception => e
     self.log e
   end
