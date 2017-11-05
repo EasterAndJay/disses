@@ -93,15 +93,12 @@ class Client
 
     self.log "taking snapshot #{message.ssid}"
     @snaps[message.ssid] = Snapshot.new(self, message, peers.keys)
-    Thread.new do
-      sleep rand * 5
-      peers.each do |pid, peer|
-        peer.puts(Message.new({
-          msg_type: Message::Type.resolve(:MARKER),
-          ssid: message.ssid,
-          ppid: self.pid
-        }).to_json)
-      end
+    peers.each do |pid, peer|
+      peer.puts(Message.new({
+        msg_type: Message::Type.resolve(:MARKER),
+        ssid: message.ssid,
+        ppid: self.pid
+      }).to_json)
     end
   end
 

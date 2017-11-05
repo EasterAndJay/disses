@@ -32,12 +32,17 @@ class Snapshot
   end
 
   def to_s
-    <<~EOF
-      CLIENT:   Client #{@client.pid}
-      SNAPSHOT: #{@id}
-      BALANCE:  $#{@balance} + $#{@incoming}
-      MESSAGES:
-        - #{@messages.join("\n  - ")}
-    EOF
+    result  = "==============================================\n"
+    result << "SNAPSHOT: #{@id}\n"
+    result << "CLIENT:   Client #{@client.pid}\n"
+    result << "BALANCE:  $#{@balance} + $#{@incoming}\n"
+
+    unless @messages.empty?
+      result << "MESSAGES:\n  - "
+      result << @messages.join("\n  - ")
+      result << "\n"
+    end
+
+    result
   end
 end
