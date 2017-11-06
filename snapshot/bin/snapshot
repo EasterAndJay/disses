@@ -3,26 +3,35 @@
 require 'optparse'
 require_relative '../client'
 
-pid  = nil
+auto = false
 num  = 3
+pid  = nil
+snap = false
 
 OptionParser.new do |args|
-  args.on('-nNUM') { |n| num = n.to_i }
-  args.on('-pPID') { |p| pid = p.to_i }
+  args.on('-a', '--auto',  'automatically take snapshots') {     auto = true   }
+  args.on('-n', '--num N', 'start an N-node cluster')      { |n| num  = n.to_i }
+  args.on('-p', '--pid P', 'start a member with PID P')    { |p| pid  = p.to_i }
+  args.on('-s', '--snap',  'take a snapshot manually')     {     snap = true   }
 end.parse!
 
-if pid.nil?
-  threads = (1..num).map do |pid|
-    Thread.new do
-      client = Client.new(pid: pid, network_size: num)
-      client.run!
-    end
-  end
+if snap
+  socket = TCPSocket.open('localhost', 5000 + (pid || 1))
+  socket.print("-42\n")
+  exit 0
+end
 
-  threads.each do |thread|
-    thread.join
+range   = (pid)? [pid] : (1..num)
+threads = range.map do |pid|
+  Thread.new do
+    Client.new({
+      auto: auto,
+      pid:  pid,
+      network_size: num
+    }).run!
   end
-else
-  client = Client.new(pid: pid, network_size: num)
-  client.run!
+end
+
+threads.each do |thread|
+  thread.join
 end

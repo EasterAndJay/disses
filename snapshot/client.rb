@@ -11,8 +11,10 @@ class Client
   attr_reader :pid
   attr_reader :tasks
 
-  def initialize(pid:, network_size:)
-    @pid = pid
+  def initialize(pid:, network_size:, auto: false)
+    @pid  = pid
+    @auto = auto
+
     @connector = Connector.new(self, peer_count: network_size - 1)
     @messenger = nil
 
@@ -46,6 +48,14 @@ class Client
     self.log e
   end
 
+  def initiate!
+    self.tasks.push Message.new({
+      msg_type: Message::Type.resolve(:MARKER),
+      ssid: SecureRandom.uuid,
+      ppid: self.pid
+    })
+  end
+
   def log(message)
     if message.is_a? Exception
       print "Client #{@pid}:  #{message}\n  #{message.backtrace.join("\n  ")}\n"
@@ -68,21 +78,17 @@ class Client
     self.log "connected to all other peers"
 
     @messenger = Messenger.new(self, peers: peers)
-    Thread.new{ @messenger.send_and_recv! }
+    Thread.new { @messenger.send_and_recv! }
 
     loop do
-      # snapshot! if gets.chomp == "snapshot"
       sleep rand * 30
-      self.tasks.push Message.new({
-        msg_type: Message::Type.resolve(:MARKER),
-        ssid: SecureRandom.uuid,
-        ppid: self.pid
-      })
+      self.initiate! if @auto
     end
   end
 
   def snapshot!(message)
     if @snaps.include? message.ssid
+      # Already working on this one...
       return
     end
 
