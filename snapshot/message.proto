@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+message Message {
+  enum Type {
+    TRANSFER     = 0;
+    MARKER       = 1;
+  }
+
+  Type   msg_type = 1;
+  uint32 amount   = 2;
+  uint32 ppid     = 3;
+  string ssid     = 4;
+}
