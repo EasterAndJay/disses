@@ -32,10 +32,11 @@ class Snapshot
   end
 
   def to_s
+    color   = @id.split('-').last.to_i(16) % 6 + 31
     result  = "==============================================\n"
     result << "SNAPSHOT: #{@id}\n"
     result << "CLIENT:   Client #{@client.pid}\n"
-    result << "BALANCE:  $#{@balance} + $#{@incoming}\n"
+    result << "BALANCE:  \e[#{color}m$#{@balance} + $#{@incoming}\e[0m\n"
 
     unless @messages.empty?
       result << "MESSAGES:\n  - "
