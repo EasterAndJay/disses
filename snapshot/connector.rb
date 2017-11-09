@@ -1,6 +1,6 @@
 require 'socket'
 require 'thread'
-require 'concurrent'
+# require 'concurrent'
 
 BASE_PORT = 5000
 
@@ -10,7 +10,7 @@ class Connector
 
   def initialize(client, peer_count:)
     @client = client
-    @peers = Concurrent::Hash.new
+    @peers = Hash.new #Concurrent::Hash.new
     @peer_count = peer_count
 
     @pid  = client.pid
@@ -38,11 +38,11 @@ class Connector
     peer.puts(@pid)
     add_peer(peer, peer_pid)
   rescue Errno::ECONNREFUSED
-    @client.log "connection to client #{peer_pid} refused"
+    @client.log.warn "connection to client #{peer_pid} refused"
     sleep rand
     retry
   rescue Exception => e
-    @client.log e
+    @client.log.error e
     sleep rand
     retry
   end
@@ -63,7 +63,7 @@ class Connector
         # Everything is fine.
         sleep rand
       rescue Exception => e
-        @client.log e
+        @client.log.error e
       end
     end
   ensure
@@ -72,10 +72,10 @@ class Connector
 
   def add_peer(peer, peer_pid)
     if @peers.key?(peer_pid)
-      @client.log "already connected to client #{peer_pid}"
+      @client.log.warn "already connected to client #{peer_pid}"
       peer.close
     else
-      @client.log "connected to client #{peer_pid}"
+      @client.log.warn "connected to client #{peer_pid}"
       @peers[peer_pid] = peer
     end
   end

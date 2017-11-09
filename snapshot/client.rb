@@ -1,3 +1,4 @@
+require 'logger'
 require 'securerandom'
 require 'thread'
 
@@ -8,12 +9,23 @@ require_relative './snapshot'
 class Client
 
   attr_reader :balance
+  attr_reader :log
   attr_reader :pid
   attr_reader :tasks
 
-  def initialize(pid:, network_size:, auto: false)
+  def initialize(pid:, network_size:, auto: false, verbosity: Logger::INFO)
     @pid  = pid
     @auto = auto
+
+    @log = Logger.new(STDOUT)
+    @log.level = verbosity
+    @log.formatter = proc do |severity, datetime, progname, msg|
+      if msg.is_a? Exception
+        "Client #{@pid}:  #{msg}\n  #{msg.backtrace.join("\n  ")}\n"
+      else
+        "Client #{@pid}:  #{msg}\n"
+      end
+    end
 
     @connector = Connector.new(self, peer_count: network_size - 1)
     @messenger = nil
@@ -36,7 +48,7 @@ class Client
     when :TRANSFER
       self.rebalance! message
     else
-      self.log "unknown message type: '#{message.msg_type}'"
+      self.log.error "unknown message type: '#{message.msg_type}'"
     end
 
     @snaps.reject! do |id, snap|
@@ -45,7 +57,7 @@ class Client
       snap.done?
     end
   rescue Exception => e
-    self.log e
+    self.log.error e
   end
 
   def initiate!
@@ -56,26 +68,17 @@ class Client
     })
   end
 
-  def log(message)
-    if message.is_a? Exception
-      print "Client #{@pid}:  #{message}\n  #{message.backtrace.join("\n  ")}\n"
-    else
-      print "Client #{@pid}:  #{message}\n"
-    end
-  end
-
   def rebalance!(message)
-    self.log "got $#{message.amount} from client #{message.ppid}"
     @balance_lock.synchronize do
+      self.log.debug "got $#{message.amount} from client #{message.ppid}"
+      self.log.info  "now has $#{@balance} + $#{message.amount} = $#{@balance + message.amount}"
       @balance += message.amount
     end
-
-    self.log "now has $#{@balance}"
   end
 
   def run!
     @connector.init_connections!
-    self.log "connected to all other peers"
+    self.log.info "connected to all other peers"
 
     @messenger = Messenger.new(self, peers: peers)
     Thread.new { @messenger.send_and_recv! }
@@ -93,7 +96,7 @@ class Client
     end
 
     @balance_lock.synchronize do
-      self.log "taking snapshot #{message.ssid}"
+      self.log.info "taking snapshot #{message.ssid}"
       @snaps[message.ssid] = Snapshot.new(self, message, peers.keys)
       sleep rand # Let some messages build up!
 
@@ -113,14 +116,14 @@ class Client
       @balance -= amount
     end
 
-    self.log "sending $#{amount} to client #{pid}"
+    self.log.debug "sending $#{amount} to client #{pid}"
     peers[pid].print(Message.new({
       msg_type: Message::Type.resolve(:TRANSFER),
       amount:   amount,
       ppid:     self.pid
     }).to_json << "\n")
   rescue Exception => e
-    self.log e
+    self.log.error e
   end
 
   private
