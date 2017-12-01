@@ -1,18 +1,22 @@
 #!/usr/bin/env ruby
 
+require 'logger'
 require 'optparse'
 require_relative '../client'
 
 auto = false
+log  = Logger::INFO
 num  = 3
 pid  = nil
 snap = false
 
 OptionParser.new do |args|
-  args.on('-a', '--auto',  'automatically take snapshots') {     auto = true   }
-  args.on('-n', '--num N', 'start an N-node cluster')      { |n| num  = n.to_i }
-  args.on('-p', '--pid P', 'start a member with PID P')    { |p| pid  = p.to_i }
-  args.on('-s', '--snap',  'take a snapshot manually')     {     snap = true   }
+  args.on('-a', '--auto',    'automatically take snapshots') {     auto = true }
+  args.on('-n', '--num N',   'start an N-node cluster')      { |n| num  = n.to_i }
+  args.on('-p', '--pid P',   'start a member with PID P')    { |p| pid  = p.to_i }
+  args.on('-q', '--quiet',   'minimal logging')              {     log  = Logger::WARN }
+  args.on('-s', '--snap',    'take a snapshot manually')     {     snap = true }
+  args.on('-v', '--verbose', 'log all the things')           {     log  = Logger::DEBUG }
 end.parse!
 
 if snap
@@ -27,7 +31,8 @@ threads = range.map do |pid|
     Client.new({
       auto: auto,
       pid:  pid,
-      network_size: num
+      network_size: num,
+      verbosity: log
     }).run!
   end
 end
