@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package main;
+
+message Message {
+  enum Type {
+    S_PROPOSE = 0;
+    R_PROPOSE = 1;
+    S_ACCEPT  = 2;
+    R_ACCEPT  = 3;
+    S_NOTIFY  = 4;
+  }
+
+  Type   type  = 1;
+  uint32 node  = 2;
+  uint32 epoch = 3;
+  uint32 value = 4;
+}
