@@ -5,14 +5,16 @@ import (
 
   "fmt";
   "net";
+  "time";
 )
 
 type Client struct {
   port int;
+  sock *net.UDPConn;
   work chan *Message;
 }
 
-func (client *Client) handle() {
+func (client *Client) Handle() {
   for {
     message := <-client.work
 
@@ -33,9 +35,9 @@ func (client *Client) handle() {
   }
 }
 
-func (client *Client) listen() {
+func (client *Client) Listen() {
   buffer := make([]byte, 2048)
-  server, err := net.ListenUDP("udp", &net.UDPAddr {
+  sock, err := net.ListenUDP("udp", &net.UDPAddr {
     IP:   net.ParseIP("127.0.0.1"),
     Port: client.port,
   })
@@ -45,17 +47,18 @@ func (client *Client) listen() {
     return
   }
 
-  defer server.Close()
+  client.sock = sock
+  defer sock.Close()
 
   for {
-    _, _, err := server.ReadFromUDP(buffer)
+    n, err := sock.Read(buffer)
     if err != nil {
       fmt.Printf("Receive error: %v\n", err)
       continue
     }
 
     message := new(Message)
-    err = proto.Unmarshal(buffer, message)
+    err = proto.Unmarshal(buffer[:n], message)
     if err != nil {
       fmt.Printf("Parse error: %v\n", err)
       continue
@@ -65,6 +68,49 @@ func (client *Client) listen() {
   }
 }
 
+func (client *Client) Run() {
+  go client.Handle()
+  go client.Listen()
+
+  for {
+    client.Send(&Message {
+      Type:  Message_S_PROPOSE,
+      Node:  uint32(client.port),
+      Epoch: 0,
+      Value: 0,
+    }, client.port)
+
+    time.Sleep(time.Second)
+  }
+}
+
+func (client *Client) Send(message *Message, port int) {
+  if client.sock == nil {
+    fmt.Printf("Socket not yet open\n")
+    return
+  }
+
+  buffer, err := proto.Marshal(message)
+  if err != nil {
+    fmt.Printf("Marshal error: %v\n", err)
+    return
+  }
+
+  _, err = client.sock.WriteToUDP(buffer, &net.UDPAddr {
+    IP:   net.ParseIP("127.0.0.1"),
+    Port: port,
+  })
+
+  if err != nil {
+    fmt.Printf("Send error: %v\n", err)
+    return
+  }
+}
+
 func NewClient(port int) Client {
-  return Client{port, make(chan *Message, 16)}
+  return Client {
+    port: port,
+    sock: nil,
+    work: make(chan *Message, 16),
+  }
 }
