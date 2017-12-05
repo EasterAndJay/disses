@@ -1,37 +1,35 @@
 package main
 
-import (
-  "github.com/golang/protobuf/proto";
-
-  "fmt";
-  "net";
-  "time";
-)
+import "container/list"
+import "fmt"
+import "github.com/golang/protobuf/proto"
+import "net"
+import "time"
 
 type Client struct {
   port int;
   sock *net.UDPConn;
   work chan *Message;
+  logs list.List;
 }
 
 func (client *Client) Handle() {
   for {
     message := <-client.work
 
-    switch message.GetType() {
-    case Message_S_PROPOSE:
-      fmt.Printf("Got propositioned\n")
-    case Message_R_PROPOSE:
-      fmt.Printf("Got a prop response\n")
-    case Message_S_ACCEPT:
-      fmt.Printf("Got sent a value\n")
-    case Message_R_ACCEPT:
-      fmt.Printf("Got a value response\n")
-    case Message_S_NOTIFY:
-      fmt.Printf("Got sent an update\n")
-    default:
-      fmt.Printf("The hell is that?\n")
+    epoch = message.GetEpoch()
+    if epoch < logs.Len() {
+      logs.Get(epoch).handle(message)
     }
+    else if epoch == logs.Len() {
+      logs.PushBack(NewEntry(message))
+    }
+    else {
+      // Way in the future!
+    }
+
+
+    
   }
 }
 
@@ -112,5 +110,6 @@ func NewClient(port int) Client {
     port: port,
     sock: nil,
     work: make(chan *Message, 16),
+    logs: list.New(),
   }
 }
