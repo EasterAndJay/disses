@@ -32,8 +32,8 @@ func NewClient(port int32) Client {
     ballotNum: 0,
     acceptNum: 0,
     acceptVal: 0,
-    peers:     make(map[int32]bool),
-    okays:     make(map[int32]bool),
+    peers:     map[int32]bool{port: true},
+    okays:     map[int32]bool{},
     logs:      make([]int32, 0),
 
     remainder: 100,
@@ -62,10 +62,14 @@ func (client *Client) Commit() {
   client.ballotNum = 0
   client.acceptNum = 0
   client.acceptVal = 0
+
+  for index, entry := range client.logs {
+    fmt.Printf(" - %4d: %d\n", index, entry)
+  }
 }
 
 func (client *Client) GetEpoch() int32 {
-  return int32(len(client.peers))
+  return int32(len(client.logs))
 }
 
 func (client *Client) GetID() int32 {
@@ -157,6 +161,7 @@ func (client *Client) Run() {
     time.Sleep(time.Second)
     client.Send(client.port, &Message {
       Type:  Message_PETITION,
+      Epoch: client.GetEpoch(),
       Value: 10,
     })
   }

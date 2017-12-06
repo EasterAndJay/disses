@@ -4,12 +4,13 @@ package main;
 
 message Message {
   enum Type {
-    PETITION = 0;
-    PROPOSE  = 1;
-    PROMISE  = 2;
-    ACCEPT   = 3;
-    ACCEPTED = 4;
-    NOTIFY   = 5;
+    UNKNOWN  = 0;
+    PETITION = 1;
+    PROPOSE  = 2;
+    PROMISE  = 3;
+    ACCEPT   = 4;
+    ACCEPTED = 5;
+    NOTIFY   = 6;
   }
 
   Type  type   = 1;

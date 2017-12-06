@@ -24,6 +24,7 @@ func (client *Client) HandlePROPOSE(message *Message) {
       Type:   Message_PROMISE,
       Epoch:  message.GetEpoch(),
       Ballot: message.GetBallot(),
+      Value:  message.GetValue(),
     })
   } else {
     fmt.Printf("Ignoring PROPOSE: %v\n", message)
@@ -38,18 +39,29 @@ func (client *Client) HandlePROMISE(message* Message) {
   client.okays[message.GetNode()] = true
   if len(client.okays) > len(client.peers) / 2 {
     //TODO Yay acceptance
+    client.Send(message.GetNode(), &Message {
+      Type:   Message_ACCEPT,
+      Epoch:  message.GetEpoch(),
+      Ballot: message.GetBallot(),
+      Value:  message.GetValue(),
+    })
   }
 }
 
 func (client *Client) HandleACCEPT(message* Message) {
-  client.acceptNum = message.GetBallot()
-  client.acceptVal = message.GetValue()
+  if message.GetBallot() >= client.ballotNum {
+    client.acceptNum = message.GetBallot()
+    client.acceptVal = message.GetValue()
 
-  client.Send(message.GetNode(), &Message {
-    Type:   Message_ACCEPTED,
-    Epoch:  message.GetEpoch(),
-    Ballot: message.GetBallot(),
-  })
+    client.Send(message.GetNode(), &Message {
+      Type:   Message_ACCEPTED,
+      Epoch:  message.GetEpoch(),
+      Ballot: message.GetBallot(),
+      Value:  message.GetValue(),
+    })
+  } else {
+    fmt.Printf("Ignoring ACCEPT: %v\n", message)
+  }
 }
 
 func (client *Client) HandleACCEPTED(message* Message) {
@@ -65,6 +77,7 @@ func (client *Client) HandleACCEPTED(message* Message) {
       Type:   Message_NOTIFY,
       Epoch:  message.GetEpoch(),
       Ballot: message.GetBallot(),
+      Value:  message.GetValue(),
     })
   }
 }
