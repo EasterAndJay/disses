@@ -2,6 +2,7 @@ package main
 
 import "fmt"
 import "github.com/golang/protobuf/proto"
+import "math/rand"
 import "net"
 import "time"
 
@@ -10,11 +11,15 @@ type Client struct {
   port      int32;
   sock      *net.UDPConn;
   work      chan *Message;
+  wish      chan int32;
 
   // Paxos Stuff
+  // clientVal int32;
+  // clientRID int32;
   ballotNum int32;
   acceptNum int32;
   acceptVal int32;
+  // acceptRID int32;
   peers     map[int32]bool;
   okays     map[int32]bool;
   logs      []int32;
@@ -29,9 +34,12 @@ func NewClient(port int32) Client {
     sock:      nil,
     work:      make(chan *Message, 16),
 
+    // clientVal: 0,
+    // clientRID: 0,
     ballotNum: 0,
     acceptNum: 0,
     acceptVal: 0,
+    // acceptRID: 0,
     peers:     map[int32]bool{port: true},
     okays:     map[int32]bool{},
     logs:      make([]int32, 0),
@@ -59,9 +67,24 @@ func (client *Client) Commit() {
   }
 
   client.logs = append(client.logs, client.acceptVal)
+  //TODO: If we added a node, tell it!
+
+  // if client.acceptRID == client.clientRID {
+  //   // Got our pet value committed!
+  //   select {
+  //   case next, ok := <-wish:
+  //     client.clientRID = rand.Int31()
+  //     client.clientVal = next
+  //   default:
+  //     client.clientRID = 0
+  //     client.clientVal = 0
+  //   }
+  // }
+
   client.ballotNum = 0
   client.acceptNum = 0
   client.acceptVal = 0
+  // client.acceptRID = 0
 
   for index, entry := range client.logs {
     fmt.Printf(" - %4d: %d\n", index, entry)
@@ -158,7 +181,7 @@ func (client *Client) Run() {
   go client.Listen()
 
   for {
-    time.Sleep(time.Second)
+    time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
     client.Send(client.port, &Message {
       Type:  Message_PETITION,
       Epoch: client.GetEpoch(),
