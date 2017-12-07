@@ -12,7 +12,7 @@ const BASE_PORT = 5000
 func main() {
   clusterSize, id := parseArgs()
   port := id + BASE_PORT
-  peers := make(map[int32]*net.UDPAddr)
+  peers := make(map[uint32]*net.UDPAddr)
   ips, err := readLines(PEERS_FILE)
   if err != nil {
     log.Fatal("Error reading configuration file")
@@ -22,12 +22,11 @@ func main() {
     peerIP := net.ParseIP(ip)
     peerPort := i+BASE_PORT
     fmt.Printf("Adding ip addr to peers: %s:%d\n", ip, peerPort)
-    peers[int32(i)] = &net.UDPAddr {
+    peers[uint32(i)] = &net.UDPAddr {
       IP: peerIP,
       Port: peerPort,
     }
   }
-  client := NewClient(int32(port), peers)
+  client := NewClient(uint32(port), peers)
   client.Run()
 }
-

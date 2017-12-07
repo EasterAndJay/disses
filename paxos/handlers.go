@@ -1,13 +1,9 @@
 package main
 
-import "fmt"
-
 func (client *Client) HandlePETITION(message* Message) {
-  if message.GetValue() < 0 && message.GetValue() > -5000 {
-    if client.remainder + message.GetValue() < 0 {
-      // TODO: Reject!
-    }
-  }
+  // INCOMPLETE
+  value := message.GetValue()
+  client.wishlist = append(client.wishlist, value)
 
   client.Broadcast(&Message {
     Type:   Message_PROPOSE,
@@ -20,31 +16,29 @@ func (client *Client) HandlePETITION(message* Message) {
 func (client *Client) HandlePROPOSE(message *Message) {
   if message.GetBallot() > client.ballotNum {
     client.ballotNum = message.GetBallot()
-    client.Send(client.peers[message.GetNode()], &Message {
-      Type:   Message_PROMISE,
-      Epoch:  message.GetEpoch(),
-      Ballot: message.GetBallot(),
-      Value:  message.GetValue(),
-    })
+
+    reply := client.MakeReply(Message_PROMISE, message)
+    reply.Accept = client.acceptNum
+    reply.Value  = client.acceptVal
+    client.Send(message.GetSender(), reply)
   } else {
-    fmt.Printf("Ignoring PROPOSE: %v\n", message)
+    client.Log("Ignoring PROPOSE: %v", message)
   }
 }
 
 func (client *Client) HandlePROMISE(message* Message) {
-  // if client.state != PROPOSING {
-  //   return
-  // }
+  value := *message.GetValue()
+  okays := client.promises[value]
+  if okays == nil {
+    okays = make(map[uint32]bool)
+    client.promises[value] = okays
+  }
 
-  client.okays[message.GetNode()] = true
-  if len(client.okays) > len(client.peers) / 2 {
+  okays[message.GetSender()] = true
+  if len(okays) > len(client.peers) / 2 {
     //TODO Yay acceptance
-    client.Send(client.peers[message.GetNode()], &Message {
-      Type:   Message_ACCEPT,
-      Epoch:  message.GetEpoch(),
-      Ballot: message.GetBallot(),
-      Value:  message.GetValue(),
-    })
+    reply := client.MakeReply(Message_ACCEPT, message)
+    client.Broadcast(reply)
   }
 }
 
@@ -53,32 +47,26 @@ func (client *Client) HandleACCEPT(message* Message) {
     client.acceptNum = message.GetBallot()
     client.acceptVal = message.GetValue()
 
-    client.Send(client.peers[message.GetNode()], &Message {
-      Type:   Message_ACCEPTED,
-      Epoch:  message.GetEpoch(),
-      Ballot: message.GetBallot(),
-      Value:  message.GetValue(),
-    })
+    reply := client.MakeReply(Message_ACCEPTED, message)
+    client.Send(message.GetSender(), reply)
   } else {
-    fmt.Printf("Ignoring ACCEPT: %v\n", message)
+    client.Log("Ignoring ACCEPT: %v", message)
   }
 }
 
 func (client *Client) HandleACCEPTED(message* Message) {
-  // if client.state != ACCEPTING {
-  //   return
-  // }
+  value := *message.GetValue()
+  okays := client.promises[value]
+  if okays == nil {
+    okays = make(map[uint32]bool)
+    client.promises[value] = okays
+  }
 
-  client.okays[message.GetNode()] = true
-  if len(client.okays) > len(client.peers) / 2 {
+  okays[message.GetSender()] = true
+  if len(okays) > len(client.peers) / 2 {
     client.Commit()
-
-    client.Broadcast(&Message {
-      Type:   Message_NOTIFY,
-      Epoch:  message.GetEpoch(),
-      Ballot: message.GetBallot(),
-      Value:  message.GetValue(),
-    })
+    reply := client.MakeReply(Message_NOTIFY, message)
+    client.Broadcast(reply)
   }
 }
 
@@ -86,4 +74,10 @@ func (client *Client) HandleNOTIFY(message* Message) {
   client.acceptNum = message.GetBallot()
   client.acceptVal = message.GetValue()
   client.Commit()
+}
+
+func (client *Client) HandleQUERY(message* Message) {
+  reply := client.MakeReply(Message_NOTIFY, message)
+  reply.Value = client.logs[message.GetEpoch()]
+  client.Send(message.GetSender(), reply)
 }
