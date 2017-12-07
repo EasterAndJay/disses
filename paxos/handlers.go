@@ -1,6 +1,10 @@
 package main
 
 func (client *Client) HandlePETITION(message* Message) {
+  // INCOMPLETE
+  value := *message.GetValue()
+  client.wishlist = append(client.wishlist, value)
+
   client.Broadcast(&Message {
     Type:   Message_PROPOSE,
     Epoch:  client.GetEpoch(),

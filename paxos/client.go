@@ -11,7 +11,7 @@ type Client struct {
   port      uint32;
   sock      *net.UDPConn;
   work      chan *Message;
-  wish      chan int32;
+  wishlist  []Value;
 
   // Paxos Stuff
   ballotNum uint32;
@@ -35,6 +35,7 @@ func NewClient(port uint32, peers map[uint32]bool) Client {
     port:      port,
     sock:      nil,
     work:      make(chan *Message, 16),
+    wishlist:  make([]Value, 0),
 
     ballotNum: 0,
     acceptNum: 0,
@@ -75,17 +76,14 @@ func (client *Client) Commit() {
     delete(client.peers, value)
   }
 
-  // if client.acceptRID == client.clientRID {
-  //   // Got our pet value committed!
-  //   select {
-  //   case next, ok := <-wish:
-  //     client.clientRID = rand.Int31()
-  //     client.clientVal = next
-  //   default:
-  //     client.clientRID = 0
-  //     client.clientVal = 0
-  //   }
-  // }
+  if client.acceptVal == client.wishlist[0] {
+    // Got our pet value committed!
+    client.wishlist = client.wishlist[1:]
+
+    if len(client.wishlist) > 0 {
+      // PROPOSE / PETITION our next value
+    }
+  }
 
   // Clear out the values from the old epoch:
   client.promises  = make(map[Value]map[uint32]bool)
@@ -196,7 +194,7 @@ func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
   return &Message {
     Type:   mtype,
     Epoch:  message.GetEpoch(),
-    Sender: message.GetSender(),
+    Sender: client.GetID(),
     Ballot: message.GetBallot(),
     Value:  message.GetValue(),
   }
