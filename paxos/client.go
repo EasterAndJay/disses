@@ -8,95 +8,102 @@ import "time"
 
 type Client struct {
   // Connection Stuff
-  port      int32;
+  port      uint32;
   sock      *net.UDPConn;
   work      chan *Message;
-  wish      chan int32;
+  wishlist  []*Value;
 
   // Paxos Stuff
-  // clientVal int32;
-  // clientRID int32;
-  ballotNum int32;
-  acceptNum int32;
-  acceptVal int32;
-  // acceptRID int32;
-  peers     map[int32]bool;
-  okays     map[int32]bool;
-  logs      []int32;
+  ballotNum uint32;
+  acceptNum uint32;
+  acceptVal *Value;
+
+  clientVal *Value;
+  clientSeq uint32;
+
+  peers     map[uint32]*net.UDPAddr;
+  promises  map[Value]map[uint32]bool;
+  accepts   map[Value]map[uint32]bool;
+  logs      []*Value;
 
   // Soccer Stuff
-  remainder int32;
+  tickets   uint32;
 }
 
-func NewClient(port int32) Client {
+func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
   return Client {
     port:      port,
     sock:      nil,
     work:      make(chan *Message, 16),
+    wishlist:  make([]*Value, 0),
 
-    // clientVal: 0,
-    // clientRID: 0,
     ballotNum: 0,
     acceptNum: 0,
-    acceptVal: 0,
-    // acceptRID: 0,
-    peers:     map[int32]bool{port: true},
-    okays:     map[int32]bool{},
-    logs:      make([]int32, 0),
+    acceptVal: nil,
+    clientVal: nil,
 
-    remainder: 100,
+    peers:     peers,
+    promises:  make(map[Value]map[uint32]bool),
+    accepts:   make(map[Value]map[uint32]bool),
+    logs:      make([]*Value, 0),
+
+    tickets:   100,
   }
 }
 
 func (client *Client) Broadcast(message *Message) {
-  for peer, _ := range client.peers {
-    client.Send(peer, message)
+  for id, _ := range client.peers {
+    client.Send(id, message)
   }
 }
 
 func (client *Client) Commit() {
-  if client.acceptVal < -5000 {
-    // Remove a server that's leaving.
-    delete(client.peers, -client.acceptVal)
-  } else if client.acceptVal > 5000 {
-    // Add a new server.
-    client.peers[client.acceptVal] = true
-  } else {
-    // Adjust the remaining tickets.
-    client.remainder += client.acceptVal
+  entry := client.acceptVal
+  value := entry.GetValue()
+  client.logs = append(client.logs, entry)
+
+  switch(entry.GetType()) {
+  case Value_BUY:
+    if value < client.tickets {
+      client.tickets -= value
+    }
+  case Value_SUPPLY:
+    client.tickets += value
+  case Value_JOIN:
+    client.peers[value] = parseAddr(PEERS_FILE, int(value))
+  case Value_LEAVE:
+    delete(client.peers, value)
   }
 
-  client.logs = append(client.logs, client.acceptVal)
-  //TODO: If we added a node, tell it!
+  if len(client.wishlist) > 0 && *client.acceptVal == *client.wishlist[0] {
+    // Got our pet value committed!
+    client.wishlist = client.wishlist[1:]
 
-  // if client.acceptRID == client.clientRID {
-  //   // Got our pet value committed!
-  //   select {
-  //   case next, ok := <-wish:
-  //     client.clientRID = rand.Int31()
-  //     client.clientVal = next
-  //   default:
-  //     client.clientRID = 0
-  //     client.clientVal = 0
-  //   }
-  // }
+    if len(client.wishlist) > 0 {
+      // PROPOSE / PETITION our next value
+    }
+  }
 
+  // Clear out the values from the old epoch:
+  client.promises  = make(map[Value]map[uint32]bool)
+  client.accepts   = make(map[Value]map[uint32]bool)
   client.ballotNum = 0
   client.acceptNum = 0
-  client.acceptVal = 0
-  // client.acceptRID = 0
+  client.acceptVal = nil
 
+  logstr := "Committed:\n"
   for index, entry := range client.logs {
-    fmt.Printf(" - %4d: %d\n", index, entry)
+    logstr += fmt.Sprintf(" - %4d: %d\n", index, entry)
   }
+  client.Log(logstr)
 }
 
-func (client *Client) GetEpoch() int32 {
-  return int32(len(client.logs))
+func (client *Client) GetEpoch() uint32 {
+  return uint32(len(client.logs))
 }
 
-func (client *Client) GetID() int32 {
-  return client.port
+func (client *Client) GetID() uint32 {
+  return client.port - BASE_PORT
 }
 
 func (client *Client) Handle() {
@@ -104,12 +111,12 @@ func (client *Client) Handle() {
     message := <-client.work
     epoch := message.GetEpoch()
 
-    fmt.Printf("Got a message! {%v}\n", message)
+    client.Log("Got a message! {%v}", message)
 
     if epoch < client.GetEpoch() {
       // It's old. Reply with a NOTIFY.
       if message.GetType() != Message_NOTIFY {
-        client.Send(message.GetNode(), &Message {
+        client.Send(message.GetSender(), &Message {
           Type:  Message_NOTIFY,
           Epoch: message.GetEpoch(),
           Value: client.logs[message.GetEpoch()],
@@ -118,8 +125,8 @@ func (client *Client) Handle() {
     } else if epoch > client.GetEpoch() {
       // We're out of date!
       // Dummy proposition to force an update.
-      client.Send(message.GetNode(), &Message {
-        Type:  Message_PROPOSE,
+      client.Send(message.GetSender(), &Message {
+        Type:  Message_QUERY,
         Epoch: client.GetEpoch(),
       })
     } else {
@@ -136,8 +143,10 @@ func (client *Client) Handle() {
         client.HandleACCEPTED(message)
       case Message_NOTIFY:
         client.HandleNOTIFY(message)
+      case Message_QUERY:
+        client.HandleQUERY(message)
       default:
-        fmt.Printf("Unknown message type: %v\n", message)
+        client.Log("Unknown message type: %v", message)
       }
     }
   }
@@ -146,12 +155,12 @@ func (client *Client) Handle() {
 func (client *Client) Listen() {
   buffer := make([]byte, 2048)
   sock, err := net.ListenUDP("udp", &net.UDPAddr {
-    IP:   net.ParseIP("127.0.0.1"),
+    IP:   net.ParseIP("0.0.0.0"),
     Port: int(client.port),
   })
 
   if err != nil {
-    fmt.Printf("Listen error: %v\n", err)
+    client.Log("Listen error: %v", err)
     return
   }
 
@@ -161,18 +170,32 @@ func (client *Client) Listen() {
   for {
     n, err := sock.Read(buffer)
     if err != nil {
-      fmt.Printf("Receive error: %v\n", err)
+      client.Log("Receive error: %v", err)
       continue
     }
 
     message := new(Message)
     err = proto.Unmarshal(buffer[:n], message)
     if err != nil {
-      fmt.Printf("Parse error: %v\n", err)
+      client.Log("Parse error: %v", err)
       continue
     }
 
     client.work <- message
+  }
+}
+
+func (client *Client) Log(format string, args ...interface{}) {
+  fmt.Printf("%d:  %s\n",  client.port, fmt.Sprintf(format, args...))
+}
+
+func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
+  return &Message {
+    Type:   mtype,
+    Epoch:  message.GetEpoch(),
+    Sender: client.GetID(),
+    Ballot: message.GetBallot(),
+    Value:  message.GetValue(),
   }
 }
 
@@ -181,35 +204,45 @@ func (client *Client) Run() {
   go client.Listen()
 
   for {
-    time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
-    client.Send(client.port, &Message {
-      Type:  Message_PETITION,
-      Epoch: client.GetEpoch(),
-      Value: 10,
-    })
+    for peerid, _ := range client.peers {
+      time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
+      client.Send(peerid, &Message {
+        Type:  Message_PETITION,
+        Epoch: client.GetEpoch(),
+        Value: &Value {
+          Type:     Value_BUY,
+          Client:   client.GetID(),
+          Sequence: client.Sequence(),
+          Value:    uint32(rand.Int31n(10) + 1),
+        },
+      })
+    }
   }
 }
 
-func (client *Client) Send(port int32, message *Message) {
+func (client *Client) Send(peerid uint32, message *Message) {
   if client.sock == nil {
-    fmt.Printf("Socket not yet open\n")
+    client.Log("Socket not yet open")
     return
   }
 
-  message.Node = client.GetID()
+  addr := client.peers[peerid]
+  message.Sender = client.GetID()
   buffer, err := proto.Marshal(message)
   if err != nil {
-    fmt.Printf("Marshal error: %v\n", err)
+    client.Log("Marshal error: %v", err)
     return
   }
 
-  _, err = client.sock.WriteToUDP(buffer, &net.UDPAddr {
-    IP:   net.ParseIP("127.0.0.1"),
-    Port: int(port),
-  })
+  _, err = client.sock.WriteToUDP(buffer, addr)
 
   if err != nil {
-    fmt.Printf("Send error: %v\n", err)
+    client.Log("Send error: %v", err)
     return
   }
+}
+
+func (client *Client) Sequence() uint32{
+  client.clientSeq += 1
+  return client.clientSeq
 }
