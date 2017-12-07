@@ -13,9 +13,10 @@ message Message {
     NOTIFY   = 6;
   }
 
-  Type  type   = 1;
-  int32 node   = 2;
-  int32 epoch  = 3;
-  int32 ballot = 4;
-  int32 value  = 5;
+  Type   type   = 1;
+  uint32 epoch  = 3;
+  uint32 sender = 2;
+  uint32 ballot = 4;
+  uint32 accept = 5;
+  Value  value  = 6;
 }
