@@ -20,7 +20,7 @@ func (client *Client) HandlePETITION(message* Message) {
 func (client *Client) HandlePROPOSE(message *Message) {
   if message.GetBallot() > client.ballotNum {
     client.ballotNum = message.GetBallot()
-    client.Send(message.GetNode(), &Message {
+    client.Send(client.peers[message.GetNode()], &Message {
       Type:   Message_PROMISE,
       Epoch:  message.GetEpoch(),
       Ballot: message.GetBallot(),
@@ -39,7 +39,7 @@ func (client *Client) HandlePROMISE(message* Message) {
   client.okays[message.GetNode()] = true
   if len(client.okays) > len(client.peers) / 2 {
     //TODO Yay acceptance
-    client.Send(message.GetNode(), &Message {
+    client.Send(client.peers[message.GetNode()], &Message {
       Type:   Message_ACCEPT,
       Epoch:  message.GetEpoch(),
       Ballot: message.GetBallot(),
@@ -53,7 +53,7 @@ func (client *Client) HandleACCEPT(message* Message) {
     client.acceptNum = message.GetBallot()
     client.acceptVal = message.GetValue()
 
-    client.Send(message.GetNode(), &Message {
+    client.Send(client.peers[message.GetNode()], &Message {
       Type:   Message_ACCEPTED,
       Epoch:  message.GetEpoch(),
       Ballot: message.GetBallot(),
