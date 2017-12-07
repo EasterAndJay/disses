@@ -18,6 +18,8 @@ func (client *Client) HandlePROPOSE(message *Message) {
     client.ballotNum = message.GetBallot()
 
     reply := client.MakeReply(Message_PROMISE, message)
+    reply.Accept = client.acceptNum
+    reply.Value  = client.acceptVal
     client.Send(message.GetSender(), reply)
   } else {
     client.Log("Ignoring PROPOSE: %v", message)
