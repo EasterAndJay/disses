@@ -3,5 +3,8 @@ likes.int
 
 # OS / editor crap:
 .DS_Store
+*.swp
 
 main
+client
+paxos-client
