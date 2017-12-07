@@ -20,7 +20,7 @@ type Client struct {
   acceptNum int32;
   acceptVal int32;
   // acceptRID int32;
-  peers     map[int32]bool;
+  peers     map[int32]*net.UDPAddr;
   okays     map[int32]bool;
   logs      []int32;
 
@@ -28,7 +28,7 @@ type Client struct {
   remainder int32;
 }
 
-func NewClient(port int32) Client {
+func NewClient(port int32, peers map[int32]*net.UDPAddr) Client {
   return Client {
     port:      port,
     sock:      nil,
@@ -40,7 +40,7 @@ func NewClient(port int32) Client {
     acceptNum: 0,
     acceptVal: 0,
     // acceptRID: 0,
-    peers:     map[int32]bool{port: true},
+    peers:     peers,
     okays:     map[int32]bool{},
     logs:      make([]int32, 0),
 
@@ -49,8 +49,8 @@ func NewClient(port int32) Client {
 }
 
 func (client *Client) Broadcast(message *Message) {
-  for peer, _ := range client.peers {
-    client.Send(peer, message)
+  for _, addr := range client.peers {
+    client.Send(addr, message)
   }
 }
 
@@ -60,7 +60,7 @@ func (client *Client) Commit() {
     delete(client.peers, -client.acceptVal)
   } else if client.acceptVal > 5000 {
     // Add a new server.
-    client.peers[client.acceptVal] = true
+    client.peers[client.acceptVal] = parseAddr(PEERS_FILE, int(client.acceptVal))
   } else {
     // Adjust the remaining tickets.
     client.remainder += client.acceptVal
@@ -96,7 +96,7 @@ func (client *Client) GetEpoch() int32 {
 }
 
 func (client *Client) GetID() int32 {
-  return client.port
+  return client.port - BASE_PORT
 }
 
 func (client *Client) Handle() {
@@ -109,7 +109,7 @@ func (client *Client) Handle() {
     if epoch < client.GetEpoch() {
       // It's old. Reply with a NOTIFY.
       if message.GetType() != Message_NOTIFY {
-        client.Send(message.GetNode(), &Message {
+        client.Send(client.peers[message.GetNode()], &Message {
           Type:  Message_NOTIFY,
           Epoch: message.GetEpoch(),
           Value: client.logs[message.GetEpoch()],
@@ -118,7 +118,7 @@ func (client *Client) Handle() {
     } else if epoch > client.GetEpoch() {
       // We're out of date!
       // Dummy proposition to force an update.
-      client.Send(message.GetNode(), &Message {
+      client.Send(client.peers[message.GetNode()], &Message {
         Type:  Message_PROPOSE,
         Epoch: client.GetEpoch(),
       })
@@ -146,7 +146,7 @@ func (client *Client) Handle() {
 func (client *Client) Listen() {
   buffer := make([]byte, 2048)
   sock, err := net.ListenUDP("udp", &net.UDPAddr {
-    IP:   net.ParseIP("127.0.0.1"),
+    IP:   net.ParseIP("0.0.0.0"),
     Port: int(client.port),
   })
 
@@ -181,16 +181,18 @@ func (client *Client) Run() {
   go client.Listen()
 
   for {
-    time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
-    client.Send(client.port, &Message {
-      Type:  Message_PETITION,
-      Epoch: client.GetEpoch(),
-      Value: 10,
-    })
+    for _, peerAddr := range client.peers {
+      time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
+      client.Send(peerAddr, &Message {
+        Type:  Message_PETITION,
+        Epoch: client.GetEpoch(),
+        Value: 10,
+      })
+    }
   }
 }
 
-func (client *Client) Send(port int32, message *Message) {
+func (client *Client) Send(addr *net.UDPAddr, message *Message) {
   if client.sock == nil {
     fmt.Printf("Socket not yet open\n")
     return
@@ -203,10 +205,7 @@ func (client *Client) Send(port int32, message *Message) {
     return
   }
 
-  _, err = client.sock.WriteToUDP(buffer, &net.UDPAddr {
-    IP:   net.ParseIP("127.0.0.1"),
-    Port: int(port),
-  })
+  _, err = client.sock.WriteToUDP(buffer, addr)
 
   if err != nil {
     fmt.Printf("Send error: %v\n", err)
