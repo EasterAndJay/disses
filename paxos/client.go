@@ -11,7 +11,7 @@ type Client struct {
   port      uint32;
   sock      *net.UDPConn;
   work      chan *Message;
-  wishlist  []Value;
+  wishlist  []*Value;
 
   // Paxos Stuff
   ballotNum uint32;
@@ -21,21 +21,21 @@ type Client struct {
   clientVal *Value;
   clientSeq uint32;
 
-  peers     map[uint32]bool;
+  peers     map[uint32]*net.UDPAddr;
   promises  map[Value]map[uint32]bool;
   accepts   map[Value]map[uint32]bool;
   logs      []*Value;
 
   // Soccer Stuff
-  remainder uint32;
+  tickets   uint32;
 }
 
-func NewClient(port uint32, peers map[uint32]bool) Client {
+func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
   return Client {
     port:      port,
     sock:      nil,
     work:      make(chan *Message, 16),
-    wishlist:  make([]Value, 0),
+    wishlist:  make([]*Value, 0),
 
     ballotNum: 0,
     acceptNum: 0,
@@ -47,13 +47,13 @@ func NewClient(port uint32, peers map[uint32]bool) Client {
     accepts:   make(map[Value]map[uint32]bool),
     logs:      make([]*Value, 0),
 
-    remainder: 100,
+    tickets:   100,
   }
 }
 
 func (client *Client) Broadcast(message *Message) {
-  for peer, _ := range client.peers {
-    client.Send(peer, message)
+  for id, _ := range client.peers {
+    client.Send(id, message)
   }
 }
 
@@ -64,19 +64,18 @@ func (client *Client) Commit() {
 
   switch(entry.GetType()) {
   case Value_BUY:
-    if value < client.remainder {
-      client.remainder -= value
+    if value < client.tickets {
+      client.tickets -= value
     }
   case Value_SUPPLY:
-    client.remainder += value
+    client.tickets += value
   case Value_JOIN:
-    client.peers[value] = true
-    //TODO: If we added a node, tell it!
+    client.peers[value] = parseAddr(PEERS_FILE, int(value))
   case Value_LEAVE:
     delete(client.peers, value)
   }
 
-  if client.acceptVal == client.wishlist[0] {
+  if len(client.wishlist) > 0 && *client.acceptVal == *client.wishlist[0] {
     // Got our pet value committed!
     client.wishlist = client.wishlist[1:]
 
@@ -104,7 +103,7 @@ func (client *Client) GetEpoch() uint32 {
 }
 
 func (client *Client) GetID() uint32 {
-  return client.port
+  return client.port - BASE_PORT
 }
 
 func (client *Client) Handle() {
@@ -156,7 +155,7 @@ func (client *Client) Handle() {
 func (client *Client) Listen() {
   buffer := make([]byte, 2048)
   sock, err := net.ListenUDP("udp", &net.UDPAddr {
-    IP:   net.ParseIP("127.0.0.1"),
+    IP:   net.ParseIP("0.0.0.0"),
     Port: int(client.port),
   })
 
@@ -205,26 +204,29 @@ func (client *Client) Run() {
   go client.Listen()
 
   for {
-    time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
-    client.Send(client.port, &Message {
-      Type:  Message_PETITION,
-      Epoch: client.GetEpoch(),
-      Value: &Value {
-        Type:     Value_BUY,
-        Client:   client.GetID(),
-        Sequence: client.Sequence(),
-        Value:    uint32(rand.Int31n(10) + 1),
-      },
-    })
+    for peerid, _ := range client.peers {
+      time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
+      client.Send(peerid, &Message {
+        Type:  Message_PETITION,
+        Epoch: client.GetEpoch(),
+        Value: &Value {
+          Type:     Value_BUY,
+          Client:   client.GetID(),
+          Sequence: client.Sequence(),
+          Value:    uint32(rand.Int31n(10) + 1),
+        },
+      })
+    }
   }
 }
 
-func (client *Client) Send(port uint32, message *Message) {
+func (client *Client) Send(peerid uint32, message *Message) {
   if client.sock == nil {
     client.Log("Socket not yet open")
     return
   }
 
+  addr := client.peers[peerid]
   message.Sender = client.GetID()
   buffer, err := proto.Marshal(message)
   if err != nil {
@@ -232,10 +234,7 @@ func (client *Client) Send(port uint32, message *Message) {
     return
   }
 
-  _, err = client.sock.WriteToUDP(buffer, &net.UDPAddr {
-    IP:   net.ParseIP("127.0.0.1"),
-    Port: int(port),
-  })
+  _, err = client.sock.WriteToUDP(buffer, addr)
 
   if err != nil {
     client.Log("Send error: %v", err)

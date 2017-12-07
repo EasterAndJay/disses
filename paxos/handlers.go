@@ -2,7 +2,7 @@ package main
 
 func (client *Client) HandlePETITION(message* Message) {
   // INCOMPLETE
-  value := *message.GetValue()
+  value := message.GetValue()
   client.wishlist = append(client.wishlist, value)
 
   client.Broadcast(&Message {
