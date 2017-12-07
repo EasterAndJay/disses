@@ -22,15 +22,15 @@ type Client struct {
   clientSeq uint32;
 
   peers     map[uint32]bool;
-  promises  map[*Value]map[uint32]bool;
-  accepts   map[*Value]map[uint32]bool;
+  promises  map[Value]map[uint32]bool;
+  accepts   map[Value]map[uint32]bool;
   logs      []*Value;
 
   // Soccer Stuff
   remainder uint32;
 }
 
-func NewClient(port uint32) Client {
+func NewClient(port uint32, peers map[uint32]bool) Client {
   return Client {
     port:      port,
     sock:      nil,
@@ -41,9 +41,9 @@ func NewClient(port uint32) Client {
     acceptVal: nil,
     clientVal: nil,
 
-    peers:     map[uint32]bool{port: true},
-    promises:  make(map[*Value]map[uint32]bool),
-    accepts:   make(map[*Value]map[uint32]bool),
+    peers:     peers,
+    promises:  make(map[Value]map[uint32]bool),
+    accepts:   make(map[Value]map[uint32]bool),
     logs:      make([]*Value, 0),
 
     remainder: 100,
@@ -88,15 +88,17 @@ func (client *Client) Commit() {
   // }
 
   // Clear out the values from the old epoch:
-  client.promises  = make(map[*Value]map[uint32]bool)
-  client.accepts   = make(map[*Value]map[uint32]bool)
+  client.promises  = make(map[Value]map[uint32]bool)
+  client.accepts   = make(map[Value]map[uint32]bool)
   client.ballotNum = 0
   client.acceptNum = 0
   client.acceptVal = nil
 
+  logstr := "Committed:\n"
   for index, entry := range client.logs {
-    fmt.Printf(" - %4d: %d\n", index, entry)
+    logstr += fmt.Sprintf(" - %4d: %d\n", index, entry)
   }
+  client.Log(logstr)
 }
 
 func (client *Client) GetEpoch() uint32 {
@@ -112,7 +114,7 @@ func (client *Client) Handle() {
     message := <-client.work
     epoch := message.GetEpoch()
 
-    fmt.Printf("Got a message! {%v}\n", message)
+    client.Log("Got a message! {%v}", message)
 
     if epoch < client.GetEpoch() {
       // It's old. Reply with a NOTIFY.
@@ -147,7 +149,7 @@ func (client *Client) Handle() {
       case Message_QUERY:
         client.HandleQUERY(message)
       default:
-        fmt.Printf("Unknown message type: %v\n", message)
+        client.Log("Unknown message type: %v", message)
       }
     }
   }
@@ -161,7 +163,7 @@ func (client *Client) Listen() {
   })
 
   if err != nil {
-    fmt.Printf("Listen error: %v\n", err)
+    client.Log("Listen error: %v", err)
     return
   }
 
@@ -171,19 +173,23 @@ func (client *Client) Listen() {
   for {
     n, err := sock.Read(buffer)
     if err != nil {
-      fmt.Printf("Receive error: %v\n", err)
+      client.Log("Receive error: %v", err)
       continue
     }
 
     message := new(Message)
     err = proto.Unmarshal(buffer[:n], message)
     if err != nil {
-      fmt.Printf("Parse error: %v\n", err)
+      client.Log("Parse error: %v", err)
       continue
     }
 
     client.work <- message
   }
+}
+
+func (client *Client) Log(format string, args ...interface{}) {
+  fmt.Printf("%d:  %s\n",  client.port, fmt.Sprintf(format, args...))
 }
 
 func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
@@ -217,14 +223,14 @@ func (client *Client) Run() {
 
 func (client *Client) Send(port uint32, message *Message) {
   if client.sock == nil {
-    fmt.Printf("Socket not yet open\n")
+    client.Log("Socket not yet open")
     return
   }
 
   message.Sender = client.GetID()
   buffer, err := proto.Marshal(message)
   if err != nil {
-    fmt.Printf("Marshal error: %v\n", err)
+    client.Log("Marshal error: %v", err)
     return
   }
 
@@ -234,7 +240,7 @@ func (client *Client) Send(port uint32, message *Message) {
   })
 
   if err != nil {
-    fmt.Printf("Send error: %v\n", err)
+    client.Log("Send error: %v", err)
     return
   }
 }

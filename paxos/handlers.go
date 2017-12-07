@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-
 func (client *Client) HandlePETITION(message* Message) {
   client.Broadcast(&Message {
     Type:   Message_PROPOSE,
@@ -18,15 +16,16 @@ func (client *Client) HandlePROPOSE(message *Message) {
     reply := client.MakeReply(Message_PROMISE, message)
     client.Send(message.GetSender(), reply)
   } else {
-    fmt.Printf("Ignoring PROPOSE: %v\n", message)
+    client.Log("Ignoring PROPOSE: %v", message)
   }
 }
 
 func (client *Client) HandlePROMISE(message* Message) {
-  okays := client.promises[message.GetValue()]
+  value := *message.GetValue()
+  okays := client.promises[value]
   if okays == nil {
     okays = make(map[uint32]bool)
-    client.promises[message.GetValue()] = okays
+    client.promises[value] = okays
   }
 
   okays[message.GetSender()] = true
@@ -45,15 +44,16 @@ func (client *Client) HandleACCEPT(message* Message) {
     reply := client.MakeReply(Message_ACCEPTED, message)
     client.Send(message.GetSender(), reply)
   } else {
-    fmt.Printf("Ignoring ACCEPT: %v\n", message)
+    client.Log("Ignoring ACCEPT: %v", message)
   }
 }
 
 func (client *Client) HandleACCEPTED(message* Message) {
-  okays := client.accepts[message.GetValue()]
+  value := *message.GetValue()
+  okays := client.promises[value]
   if okays == nil {
     okays = make(map[uint32]bool)
-    client.promises[message.GetValue()] = okays
+    client.promises[value] = okays
   }
 
   okays[message.GetSender()] = true
