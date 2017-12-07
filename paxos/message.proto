@@ -2,6 +2,21 @@ syntax = "proto3";
 
 package main;
 
+message Value {
+  enum Type {
+    UNKNOWN = 0;
+    BUY     = 1;
+    SUPPLY  = 2;
+    JOIN    = 3;
+    LEAVE   = 4;
+  }
+
+  Type   type     = 1;
+  uint32 client   = 2;
+  uint32 sequence = 3;
+  uint32 value    = 4;
+}
+
 message Message {
   enum Type {
     UNKNOWN  = 0;
@@ -11,11 +26,12 @@ message Message {
     ACCEPT   = 4;
     ACCEPTED = 5;
     NOTIFY   = 6;
+    QUERY    = 7;
   }
 
-  Type  type   = 1;
-  int32 node   = 2;
-  int32 epoch  = 3;
-  int32 ballot = 4;
-  int32 value  = 5;
+  Type   type   = 1;
+  uint32 epoch  = 3;
+  uint32 sender = 2;
+  uint32 ballot = 4;
+  Value  value  = 5;
 }

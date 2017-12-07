@@ -8,41 +8,43 @@ import "time"
 
 type Client struct {
   // Connection Stuff
-  port      int32;
+  port      uint32;
   sock      *net.UDPConn;
   work      chan *Message;
   wish      chan int32;
 
   // Paxos Stuff
-  // clientVal int32;
-  // clientRID int32;
-  ballotNum int32;
-  acceptNum int32;
-  acceptVal int32;
-  // acceptRID int32;
-  peers     map[int32]bool;
-  okays     map[int32]bool;
-  logs      []int32;
+  ballotNum uint32;
+  acceptNum uint32;
+  acceptVal *Value;
+
+  clientVal *Value;
+  clientSeq uint32;
+
+  peers     map[uint32]bool;
+  promises  map[*Value]map[uint32]bool;
+  accepts   map[*Value]map[uint32]bool;
+  logs      []*Value;
 
   // Soccer Stuff
-  remainder int32;
+  remainder uint32;
 }
 
-func NewClient(port int32) Client {
+func NewClient(port uint32) Client {
   return Client {
     port:      port,
     sock:      nil,
     work:      make(chan *Message, 16),
 
-    // clientVal: 0,
-    // clientRID: 0,
     ballotNum: 0,
     acceptNum: 0,
-    acceptVal: 0,
-    // acceptRID: 0,
-    peers:     map[int32]bool{port: true},
-    okays:     map[int32]bool{},
-    logs:      make([]int32, 0),
+    acceptVal: nil,
+    clientVal: nil,
+
+    peers:     map[uint32]bool{port: true},
+    promises:  make(map[*Value]map[uint32]bool),
+    accepts:   make(map[*Value]map[uint32]bool),
+    logs:      make([]*Value, 0),
 
     remainder: 100,
   }
@@ -55,19 +57,23 @@ func (client *Client) Broadcast(message *Message) {
 }
 
 func (client *Client) Commit() {
-  if client.acceptVal < -5000 {
-    // Remove a server that's leaving.
-    delete(client.peers, -client.acceptVal)
-  } else if client.acceptVal > 5000 {
-    // Add a new server.
-    client.peers[client.acceptVal] = true
-  } else {
-    // Adjust the remaining tickets.
-    client.remainder += client.acceptVal
-  }
+  entry := client.acceptVal
+  value := entry.GetValue()
+  client.logs = append(client.logs, entry)
 
-  client.logs = append(client.logs, client.acceptVal)
-  //TODO: If we added a node, tell it!
+  switch(entry.GetType()) {
+  case Value_BUY:
+    if value < client.remainder {
+      client.remainder -= value
+    }
+  case Value_SUPPLY:
+    client.remainder += value
+  case Value_JOIN:
+    client.peers[value] = true
+    //TODO: If we added a node, tell it!
+  case Value_LEAVE:
+    delete(client.peers, value)
+  }
 
   // if client.acceptRID == client.clientRID {
   //   // Got our pet value committed!
@@ -81,21 +87,23 @@ func (client *Client) Commit() {
   //   }
   // }
 
+  // Clear out the values from the old epoch:
+  client.promises  = make(map[*Value]map[uint32]bool)
+  client.accepts   = make(map[*Value]map[uint32]bool)
   client.ballotNum = 0
   client.acceptNum = 0
-  client.acceptVal = 0
-  // client.acceptRID = 0
+  client.acceptVal = nil
 
   for index, entry := range client.logs {
     fmt.Printf(" - %4d: %d\n", index, entry)
   }
 }
 
-func (client *Client) GetEpoch() int32 {
-  return int32(len(client.logs))
+func (client *Client) GetEpoch() uint32 {
+  return uint32(len(client.logs))
 }
 
-func (client *Client) GetID() int32 {
+func (client *Client) GetID() uint32 {
   return client.port
 }
 
@@ -109,7 +117,7 @@ func (client *Client) Handle() {
     if epoch < client.GetEpoch() {
       // It's old. Reply with a NOTIFY.
       if message.GetType() != Message_NOTIFY {
-        client.Send(message.GetNode(), &Message {
+        client.Send(message.GetSender(), &Message {
           Type:  Message_NOTIFY,
           Epoch: message.GetEpoch(),
           Value: client.logs[message.GetEpoch()],
@@ -118,8 +126,8 @@ func (client *Client) Handle() {
     } else if epoch > client.GetEpoch() {
       // We're out of date!
       // Dummy proposition to force an update.
-      client.Send(message.GetNode(), &Message {
-        Type:  Message_PROPOSE,
+      client.Send(message.GetSender(), &Message {
+        Type:  Message_QUERY,
         Epoch: client.GetEpoch(),
       })
     } else {
@@ -136,6 +144,8 @@ func (client *Client) Handle() {
         client.HandleACCEPTED(message)
       case Message_NOTIFY:
         client.HandleNOTIFY(message)
+      case Message_QUERY:
+        client.HandleQUERY(message)
       default:
         fmt.Printf("Unknown message type: %v\n", message)
       }
@@ -176,6 +186,16 @@ func (client *Client) Listen() {
   }
 }
 
+func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
+  return &Message {
+    Type:   mtype,
+    Epoch:  message.GetEpoch(),
+    Sender: message.GetSender(),
+    Ballot: message.GetBallot(),
+    Value:  message.GetValue(),
+  }
+}
+
 func (client *Client) Run() {
   go client.Handle()
   go client.Listen()
@@ -185,18 +205,23 @@ func (client *Client) Run() {
     client.Send(client.port, &Message {
       Type:  Message_PETITION,
       Epoch: client.GetEpoch(),
-      Value: 10,
+      Value: &Value {
+        Type:     Value_BUY,
+        Client:   client.GetID(),
+        Sequence: client.Sequence(),
+        Value:    uint32(rand.Int31n(10) + 1),
+      },
     })
   }
 }
 
-func (client *Client) Send(port int32, message *Message) {
+func (client *Client) Send(port uint32, message *Message) {
   if client.sock == nil {
     fmt.Printf("Socket not yet open\n")
     return
   }
 
-  message.Node = client.GetID()
+  message.Sender = client.GetID()
   buffer, err := proto.Marshal(message)
   if err != nil {
     fmt.Printf("Marshal error: %v\n", err)
@@ -212,4 +237,9 @@ func (client *Client) Send(port int32, message *Message) {
     fmt.Printf("Send error: %v\n", err)
     return
   }
+}
+
+func (client *Client) Sequence() uint32{
+  client.clientSeq += 1
+  return client.clientSeq
 }
