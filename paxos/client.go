@@ -96,7 +96,7 @@ func (client *Client) GetEpoch() int32 {
 }
 
 func (client *Client) GetID() int32 {
-  return client.port
+  return client.port - BASE_PORT
 }
 
 func (client *Client) Handle() {
@@ -146,7 +146,7 @@ func (client *Client) Handle() {
 func (client *Client) Listen() {
   buffer := make([]byte, 2048)
   sock, err := net.ListenUDP("udp", &net.UDPAddr {
-    IP:   net.ParseIP("127.0.0.1"),
+    IP:   net.ParseIP("0.0.0.0"),
     Port: int(client.port),
   })
 

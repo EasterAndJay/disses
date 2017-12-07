@@ -8,3 +8,5 @@ likes.int
 main
 client
 paxos-client
+
+*.pb.go

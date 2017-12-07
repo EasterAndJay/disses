@@ -1,26 +1,30 @@
 package main
 
 import(
+  "fmt"
   "log"
   "net"
-  "strings"
-  "strconv"
 )
 
 const PEERS_FILE = "peers.txt"
+const BASE_PORT = 5000
 
 func main() {
-  clusterSize, port, ipPorts := parseArgs()
+  clusterSize, id := parseArgs()
+  port := id + BASE_PORT
   peers := make(map[int32]*net.UDPAddr)
-  for _, ipPort := range ipPorts[1:clusterSize+1] {
-    ip := net.ParseIP(strings.Split(ipPort, ":")[0])
-    port, err := strconv.Atoi(strings.Split(ipPort, ":")[1])
-    if err != nil {
-      log.Fatal("Error invalid port in configuration file")
-    }
-    peers[int32(port)] = &net.UDPAddr {
-      IP: ip,
-      Port: port,
+  ips, err := readLines(PEERS_FILE)
+  if err != nil {
+    log.Fatal("Error reading configuration file")
+  }
+
+  for i, ip := range ips[:clusterSize] {
+    peerIP := net.ParseIP(ip)
+    peerPort := i+BASE_PORT
+    fmt.Printf("Adding ip addr to peers: %s:%d\n", ip, peerPort)
+    peers[int32(i)] = &net.UDPAddr {
+      IP: peerIP,
+      Port: peerPort,
     }
   }
   client := NewClient(int32(port), peers)

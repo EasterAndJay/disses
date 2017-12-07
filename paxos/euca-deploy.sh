@@ -12,18 +12,11 @@ for ip_port in $IPS
 do
   ip=`echo $ip_port | cut -d ':' -f 1`
   host="ubuntu@$ip"
-  for ip_port2 in $IPS
-  do
-    ip2=`echo $ip_port2 | cut -d ':' -f 1`
-    if [ $ip != $ip2 ]
-    then
-      echo $ip_port2 >> "$PEERS_FILE"
-    fi
-  done
-  echo -e "`echo $ip_port | cut -d ':' -f 2`\n$(cat $PEERS_FILE)" > $PEERS_FILE
-  echo "peers.txt file for host: $ip_port"
-  cat $PEERS_FILE
+  # echo $ip_port2 >> "$PEERS_FILE"
+  # echo -e "`echo $ip_port | cut -d ':' -f 2`\n$(cat $PEERS_FILE)" > $PEERS_FILE
+  # echo "peers.txt file for host: $ip_port"
+  # cat $PEERS_FILE
   scp -i $PRIVATE_KEY $EXECUTABLE "$host:~/$EXECUTABLE"
   scp -i $PRIVATE_KEY $PEERS_FILE "$host:~/peers.txt"
-  rm $PEERS_FILE 
+  # rm $PEERS_FILE 
 done
