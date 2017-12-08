@@ -119,7 +119,6 @@ func (client *Client) HandleHEARTBEAT(message* Message) {
   if(int32(message.GetSender()) == client.leaderID) {
     select {
     case client.heartbeat <- 1:
-      client.Log("Put a heartbeat in the queue")
     default:
       client.Log("Heartbeat channel full - skipping this heartbeat message")
     }

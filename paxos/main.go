@@ -45,15 +45,19 @@ func petition(peers map[uint32]*net.UDPAddr, id int, vtype Value_Type, value uin
   }
 }
 
-func runOne(peers map[uint32]*net.UDPAddr, port uint32) {
+func runOne(peers map[uint32]*net.UDPAddr, port uint32, clusterSize uint32) {
   client := NewClient(port, peers)
-  client.Run()
+  if clusterSize == 5 {
+    client.Run(true)
+  } else {
+    client.Run(false)
+  }
 }
 
 func runAll(peers map[uint32]*net.UDPAddr) {
   for id, _ := range peers {
     client := NewClient(id + BASE_PORT, peers)
-    go client.Run()
+    go client.Run(false)
   }
 
   for {
@@ -106,7 +110,7 @@ func main() {
       runAll(peers)
     } else {
       rand.Seed(int64(os.Getpid()))
-      runOne(peers, uint32(id + BASE_PORT))
+      runOne(peers, uint32(id + BASE_PORT), uint32(clusterSize))
     }
   }
 }

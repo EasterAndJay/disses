@@ -69,6 +69,13 @@ func (client *Client) Broadcast(message *Message) {
 func (client *Client) Commit(message *Message) {
   entry := message.GetValue()
   value := entry.GetValue()
+  // if len(client.logs) > 0 {
+  //   lastEntry := client.logs[len(client.logs)-1]
+  //   if lastEntry.Client == entry.Client && lastEntry.Sequence == entry.Sequence {
+  //     // Already processed this message e.g. with new clients from a config change
+  //     return
+  //   }
+  // }
   client.logs = append(client.logs, entry)
 
   switch(entry.GetType()) {
@@ -79,7 +86,12 @@ func (client *Client) Commit(message *Message) {
   case Value_SUPPLY:
     client.tickets += value
   case Value_JOIN:
-    client.peers[value] = parseAddr(PEERS_FILE, int(value))
+    addr, err := parseAddr(PEERS_FILE, value)
+    if err != nil {
+      client.Log("Error parsing addr from config file: %v", err)
+      break
+    }
+    client.peers[value] = addr
   case Value_LEAVE:
     delete(client.peers, value)
   }
@@ -228,23 +240,35 @@ func (client *Client) Propose(value *Value) {
     Value:  value,
   })
 }
+func (client *Client) Join() {
+  client.Propose(&Value {
+    Type:     Value_JOIN,
+    Client:   client.GetID(),
+    Sequence: client.Sequence(),
+    Value:    client.GetID(),
+  })
+}
 
-func (client *Client) Run() {
+func (client *Client) Run(joining bool) {
   go client.Handle()
   go client.Listen()
-
+  if joining {
+    client.leaderID = 0
+    time.Sleep(time.Duration(2 * time.Second))
+    client.Join()
+  }
   for {
     time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
-    client.Send(client.GetID(), &Message {
-      Type:  Message_PETITION,
-      Epoch: client.GetEpoch(),
-      Value: &Value {
-        Type:     Value_BUY,
-        Client:   client.GetID(),
-        Sequence: client.Sequence(),
-        Value:    uint32(rand.Int31n(10) + 1),
-      },
-    })
+    // client.Send(client.GetID(), &Message {
+    //   Type:  Message_PETITION,
+    //   Epoch: client.GetEpoch(),
+    //   Value: &Value {
+    //     Type:     Value_BUY,
+    //     Client:   client.GetID(),
+    //     Sequence: client.Sequence(),
+    //     Value:    uint32(rand.Int31n(10) + 1),
+    //   },
+    // })
   }
 }
 
@@ -306,7 +330,6 @@ func (client *Client) StartTimeout(leader int32) {
   for {
     select {
     case <-client.heartbeat:
-      client.Log("Got a heartbeat - resetting timeout")
     case <-time.After(time.Second * TIMEOUT):
         if leader == client.leaderID {
           fmt.Println("===== TIMEOUT =====")

@@ -2,11 +2,8 @@ package main
 
 import(
   "bufio"
-  "log"
   "net"
   "os"
-  "strconv"
-  "strings"
 )
 
 func readLines(path string) ([]string, error) {
@@ -24,25 +21,15 @@ func readLines(path string) ([]string, error) {
   return lines, scanner.Err()
 }
 
-func parseAddr(file string, port int) *net.UDPAddr {
-  portStr := strconv.Itoa(port)
-  f, err := os.Open(file)
+func parseAddr(file string, id uint32) (*net.UDPAddr, error) {
+  addrs, err := readLines(file)
   if err != nil {
-    log.Fatal("Peers file does not exist")
-    return nil
+    return nil, err
   }
-  scanner := bufio.NewScanner(f)
-  for scanner.Scan() {
-    text := scanner.Text()
-    if strings.Contains(text, portStr) {
-      addr, err := net.ResolveUDPAddr("udp", text)
-      if err != nil {
-        log.Fatal("Error parsing ip:port address from peers file")
-        return nil
-      }
-      return addr
-    }
+  addr, err := net.ResolveUDPAddr("udp", addrs[id])
+  if err != nil {
+    return nil, err
   }
-  log.Fatal("ip:port not found in peers file")
-  return nil
+
+  return addr, nil
 }
