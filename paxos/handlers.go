@@ -4,6 +4,13 @@ func (client *Client) HandlePETITION(message* Message) {
   // INCOMPLETE
   value := message.GetValue()
   client.wishlist = append(client.wishlist, value)
+
+  client.Broadcast(&Message {
+    Type:   Message_PROPOSE,
+    Epoch:  client.GetEpoch(),
+    Ballot: client.ballotNum + 1,
+    Value:  message.GetValue(),
+  })
 }
 
 func (client *Client) HandlePROPOSE(message *Message) {
@@ -20,17 +27,20 @@ func (client *Client) HandlePROPOSE(message *Message) {
 }
 
 func (client *Client) HandlePROMISE(message* Message) {
-  value := *message.GetValue()
-  okays := client.promises[value]
-  if okays == nil {
-    okays = make(map[uint32]bool)
-    client.promises[value] = okays
+  ballotNum := message.GetBallot()
+  acceptNum := message.GetAccept()
+  if _, ok := client.promises[ballotNum]; !ok {
+    client.promises[ballotNum] = make(map[uint32]bool)
   }
-
-  okays[message.GetSender()] = true
-  if len(okays) > len(client.peers) / 2 {
+  client.promises[ballotNum][message.GetSender()] = true
+  if acceptNum > client.clientNum {
+    client.clientVal = message.GetValue()
+    client.clientNum = acceptNum
+  }
+  if len(client.promises[ballotNum]) > len(client.peers) / 2 {
     //TODO Yay acceptance
     reply := client.MakeReply(Message_ACCEPT, message)
+    reply.Value = client.clientVal
     client.Broadcast(reply)
   }
 }
@@ -49,10 +59,10 @@ func (client *Client) HandleACCEPT(message* Message) {
 
 func (client *Client) HandleACCEPTED(message* Message) {
   value := *message.GetValue()
-  okays := client.promises[value]
+  okays := client.accepts[value]
   if okays == nil {
     okays = make(map[uint32]bool)
-    client.promises[value] = okays
+    client.accepts[value] = okays
   }
 
   okays[message.GetSender()] = true
@@ -64,6 +74,8 @@ func (client *Client) HandleACCEPTED(message* Message) {
 }
 
 func (client *Client) HandleNOTIFY(message* Message) {
+  client.acceptNum = message.GetBallot()
+  client.acceptVal = message.GetValue()
   client.Commit(message)
 }
 

@@ -19,10 +19,12 @@ type Client struct {
   acceptVal *Value;
 
   clientVal *Value;
+  clientNum uint32;
+
   clientSeq uint32;
 
   peers     map[uint32]*net.UDPAddr;
-  promises  map[Value]map[uint32]bool;
+  promises  map[uint32]map[uint32]bool;
   accepts   map[Value]map[uint32]bool;
   logs      []*Value;
 
@@ -41,9 +43,10 @@ func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
     acceptNum: 0,
     acceptVal: nil,
     clientVal: nil,
+    clientNum: 0,
 
     peers:     peers,
-    promises:  make(map[Value]map[uint32]bool),
+    promises:  make(map[uint32]map[uint32]bool),
     accepts:   make(map[Value]map[uint32]bool),
     logs:      make([]*Value, 0),
 
@@ -83,14 +86,14 @@ func (client *Client) Commit(message *Message) {
   }
 
   if len(client.wishlist) > 0 {
-    go func {
+    go func() {
       time.Sleep(time.Duration(2 * rand.Float32()) * time.Second)
       client.Propose(client.wishlist[0])
-    }
+    }()
   }
 
   // Clear out the values from the old epoch:
-  client.promises  = make(map[Value]map[uint32]bool)
+  client.promises  = make(map[uint32]map[uint32]bool)
   client.accepts   = make(map[Value]map[uint32]bool)
   client.ballotNum = 0
   client.acceptNum = 0
@@ -204,14 +207,14 @@ func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
   }
 }
 
-func (client *Client) Propose(value Value) {
+func (client *Client) Propose(value *Value) {
   client.ballotNum += 1
   client.Broadcast(&Message {
     Type:   Message_PROPOSE,
     Epoch:  client.GetEpoch(),
     Sender: client.GetID(),
     Ballot: client.ballotNum,
-    Value:  message.GetValue(),
+    Value:  value,
   })
 }
 
