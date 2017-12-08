@@ -8,12 +8,13 @@ func (client *Client) HandlePETITION(message* Message) {
   case int32(client.GetID()):
     // I am leader
     client.Broadcast(&Message {
-      Type:   Message_PROPOSE,
+      Type:   Message_ACCEPT,
       Epoch:  client.GetEpoch(),
       Ballot: client.ballotNum + 1,
       Value:  message.GetValue(),
     })
   case -1:
+    client.Log("THERE ISN'T A LEADER - I WILL DO IT")
     // No leader
     client.Broadcast(&Message {
       Type:   Message_PROPOSE,
@@ -66,6 +67,7 @@ func (client *Client) HandleACCEPT(message* Message) {
   if message.GetBallot() >= client.ballotNum {
     if client.leaderID != int32(message.GetSender()) {
       // New leader
+      client.Log("New leader is client: %d", message.GetSender())
       if client.GetID() == message.GetSender() {
         // This client just became leader
         go client.Heartbeat()
@@ -74,7 +76,7 @@ func (client *Client) HandleACCEPT(message* Message) {
       if len(client.heartbeat) > 0 {
         <-client.heartbeat
       }
-      go client.StartTimeout()
+      go client.StartTimeout(client.leaderID)
     }
 
     client.acceptNum = message.GetBallot()
@@ -117,6 +119,7 @@ func (client *Client) HandleHEARTBEAT(message* Message) {
   if(int32(message.GetSender()) == client.leaderID) {
     select {
     case client.heartbeat <- 1:
+      client.Log("Put a heartbeat in the queue")
     default:
       client.Log("Heartbeat channel full - skipping this heartbeat message")
     }

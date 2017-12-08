@@ -6,8 +6,8 @@ import "math/rand"
 import "net"
 import "time"
 
-const HEARTBEAT_INTERVAL = 1
-const TIMEOUT = 3
+const HEARTBEAT_INTERVAL = 500
+const TIMEOUT = 5
 
 type Client struct {
   // Connection Stuff
@@ -105,9 +105,10 @@ func (client *Client) Commit(message *Message) {
   client.clientNum = 0
 
   logstr := "Committed:\n"
-  for index, entry := range client.logs {
-    logstr += fmt.Sprintf(" - %4d: %v\n", index, entry)
-  }
+  // for index, entry := range client.logs {
+  //   logstr += fmt.Sprintf(" - %4d: %v\n", index, entry)
+  // }
+  logstr += fmt.Sprintf(" - %4d: %v\n", len(client.logs)-1, entry)
   client.Log(logstr)
 }
 
@@ -122,7 +123,7 @@ func (client *Client) GetID() uint32 {
 func (client *Client) Handle() {
   for {
     message := <-client.work
-    client.Log("Got a message! {%v}", message)
+    // client.Log("Got a message! {%v}", message)
 
     if message.GetEpoch() < client.GetEpoch() {
       // It's old. Reply with a NOTIFY.
@@ -216,7 +217,7 @@ func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
 func (client *Client) Propose(value *Value) {
   client.ballotNum += 1
   client.Broadcast(&Message {
-    Type:   Message_PROPOSE,
+    Type:   Message_PETITION,
     Epoch:  client.GetEpoch(),
     Sender: client.GetID(),
     Ballot: client.ballotNum,
@@ -283,7 +284,7 @@ func (client *Client) TrimWishlist() bool {
 
 func (client *Client) Heartbeat() {
   for {
-    time.Sleep(HEARTBEAT_INTERVAL * time.Second)
+    time.Sleep(HEARTBEAT_INTERVAL * time.Millisecond)
     if client.leaderID != int32(client.GetID()) {
       return
     }
@@ -297,13 +298,16 @@ func (client *Client) Heartbeat() {
   }
 }
 
-func (client *Client) StartTimeout() {
+func (client *Client) StartTimeout(leader int32) {
   for {
     select {
     case <-client.heartbeat:
+      client.Log("Got a heartbeat - resetting timeout")
     case <-time.After(time.Second * TIMEOUT):
-        fmt.Println("===== TIMEOUT =====")
-        client.leaderID = -1
+        if leader == client.leaderID {
+          fmt.Println("===== TIMEOUT =====")
+          client.leaderID = -1
+        }
         return
     }
   }
