@@ -86,10 +86,7 @@ func (client *Client) Commit(message *Message) {
   }
 
   if len(client.wishlist) > 0 {
-    go func() {
-      time.Sleep(time.Duration(2 * rand.Float32()) * time.Second)
-      client.Propose(client.wishlist[0])
-    }()
+    client.Propose(client.wishlist[0])
   }
 
   // Clear out the values from the old epoch:
@@ -98,6 +95,8 @@ func (client *Client) Commit(message *Message) {
   client.ballotNum = 0
   client.acceptNum = 0
   client.acceptVal = nil
+  client.clientVal = nil
+  client.clientNum = 0
 
   logstr := "Committed:\n"
   for index, entry := range client.logs {
@@ -117,11 +116,9 @@ func (client *Client) GetID() uint32 {
 func (client *Client) Handle() {
   for {
     message := <-client.work
-    epoch := message.GetEpoch()
-
     client.Log("Got a message! {%v}", message)
 
-    if epoch < client.GetEpoch() {
+    if message.GetEpoch() < client.GetEpoch() {
       // It's old. Reply with a NOTIFY.
       if message.GetType() != Message_NOTIFY {
         client.Send(message.GetSender(), &Message {
@@ -130,12 +127,13 @@ func (client *Client) Handle() {
           Value: client.logs[message.GetEpoch()],
         })
       }
-    } else if epoch > client.GetEpoch() {
+    } else if message.GetEpoch() > client.GetEpoch() {
       // We're out of date!
       // Dummy proposition to force an update.
       client.Send(message.GetSender(), &Message {
-        Type:  Message_QUERY,
-        Epoch: client.GetEpoch(),
+        Type:   Message_QUERY,
+        Epoch:  client.GetEpoch(),
+        Sender: client.GetID(),
       })
     } else {
       switch message.GetType() {
@@ -223,19 +221,17 @@ func (client *Client) Run() {
   go client.Listen()
 
   for {
-    for peerid, _ := range client.peers {
-      time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
-      client.Send(peerid, &Message {
-        Type:  Message_PETITION,
-        Epoch: client.GetEpoch(),
-        Value: &Value {
-          Type:     Value_BUY,
-          Client:   client.GetID(),
-          Sequence: client.Sequence(),
-          Value:    uint32(rand.Int31n(10) + 1),
-        },
-      })
-    }
+    time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
+    client.Send(client.GetID(), &Message {
+      Type:  Message_PETITION,
+      Epoch: client.GetEpoch(),
+      Value: &Value {
+        Type:     Value_BUY,
+        Client:   client.GetID(),
+        Sequence: client.Sequence(),
+        Value:    uint32(rand.Int31n(10) + 1),
+      },
+    })
   }
 }
 

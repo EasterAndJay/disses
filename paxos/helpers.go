@@ -51,14 +51,14 @@ func parseAddr(file string, port int) *net.UDPAddr {
 func parseArgs() (int, int) {
   var clusterSize int
   var id int
+
   flag.IntVar(&clusterSize, "cluster-size", 3, "Enter the cluster size. Valid values are one of: {3, 5}")
   flag.IntVar(&id, "id", -1, "Enter the node id. Should be in range {0..4}")
   flag.Parse()
+
   if clusterSize != 3 && clusterSize != 5 {
     log.Fatal("Invalid cluster size: ", clusterSize)
   }
-  if id < 0 || id > 4 {
-    log.Fatal("Invalid id: ", id)
-  }
-   return clusterSize, id 
+
+  return clusterSize, id
 }
