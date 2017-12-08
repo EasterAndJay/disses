@@ -30,6 +30,9 @@ type Client struct {
 
   // Soccer Stuff
   tickets   uint32;
+
+  // Extra
+  running   bool;
 }
 
 func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
@@ -51,6 +54,8 @@ func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
     logs:      make([]*Value, 0),
 
     tickets:   100,
+
+    running:   true,
   }
 }
 
@@ -81,7 +86,12 @@ func (client *Client) Commit(message *Message) {
   case Value_JOIN:
     client.peers[value] = parseAddr(PEERS_FILE, int(value))
   case Value_LEAVE:
+    client.Log("Node %d has left the cluster.", value)
     delete(client.peers, value)
+    if value == client.GetID() {
+      client.Log("Bye now!")
+      client.running = false
+    }
   }
 
   // Remove wishes that have been committed:
@@ -117,6 +127,9 @@ func (client *Client) Handle() {
   for {
     message := <-client.work
     // client.Log("Got a message! {%v}", message)
+    if !client.running {
+      return
+    }
 
     if message.GetEpoch() < client.GetEpoch() {
       switch message.GetType() {
@@ -188,6 +201,10 @@ func (client *Client) Listen() {
       continue
     }
 
+    if !client.running {
+      return
+    }
+
     message := new(Message)
     err = proto.Unmarshal(buffer[:n], message)
     if err != nil {
@@ -228,7 +245,7 @@ func (client *Client) Run() {
   go client.Handle()
   go client.Listen()
 
-  for {
+  for client.running {
     time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
     client.Send(client.GetID(), &Message {
       Type:  Message_PETITION,
@@ -250,6 +267,11 @@ func (client *Client) Send(peerid uint32, message *Message) {
   }
 
   addr := client.peers[peerid]
+  if addr == nil {
+    // No address for this node (yet?)
+    return
+  }
+
   message.Sender = client.GetID()
   buffer, err := proto.Marshal(message)
   if err != nil {

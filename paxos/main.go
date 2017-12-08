@@ -71,6 +71,8 @@ func main() {
   id     := flag.Int("id",          -1,     "Enter the node id. Should be in range {0..4}")
   buy    := flag.Int("buy",          0,     "Number of tickets to buy.")
   supply := flag.Int("supply",       0,     "Number of tickets to add to the supply.")
+  join   := flag.Int("join",         0,     "Add a node to the cluster.")
+  leave  := flag.Int("leave",        0,     "Remove a node from the cluster.")
   print  := flag.Bool("log",         false, "Print the log as one client sees it.")
   flag.Parse()
 
@@ -98,6 +100,10 @@ func main() {
     petition(peers, *id, Value_BUY, uint32(*buy))
   } else if *supply > 0 {
     petition(peers, *id, Value_SUPPLY, uint32(*supply))
+  } else if *join > 0 {
+    petition(peers, *id, Value_JOIN, uint32(*join))
+  } else if *leave > 0 {
+    petition(peers, *id, Value_LEAVE, uint32(*leave))
   } else if *print {
     send(peers, *id, &Message {Type: Message_LOG})
   } else {
