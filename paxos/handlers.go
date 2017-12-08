@@ -4,13 +4,6 @@ func (client *Client) HandlePETITION(message* Message) {
   // INCOMPLETE
   value := message.GetValue()
   client.wishlist = append(client.wishlist, value)
-
-  client.Broadcast(&Message {
-    Type:   Message_PROPOSE,
-    Epoch:  client.GetEpoch(),
-    Ballot: client.ballotNum + 1,
-    Value:  message.GetValue(),
-  })
 }
 
 func (client *Client) HandlePROPOSE(message *Message) {
@@ -64,16 +57,14 @@ func (client *Client) HandleACCEPTED(message* Message) {
 
   okays[message.GetSender()] = true
   if len(okays) > len(client.peers) / 2 {
-    client.Commit()
+    client.Commit(message)
     reply := client.MakeReply(Message_NOTIFY, message)
     client.Broadcast(reply)
   }
 }
 
 func (client *Client) HandleNOTIFY(message* Message) {
-  client.acceptNum = message.GetBallot()
-  client.acceptVal = message.GetValue()
-  client.Commit()
+  client.Commit(message)
 }
 
 func (client *Client) HandleQUERY(message* Message) {

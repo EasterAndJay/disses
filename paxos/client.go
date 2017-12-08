@@ -57,8 +57,8 @@ func (client *Client) Broadcast(message *Message) {
   }
 }
 
-func (client *Client) Commit() {
-  entry := client.acceptVal
+func (client *Client) Commit(message *Message) {
+  entry := message.GetValue()
   value := entry.GetValue()
   client.logs = append(client.logs, entry)
 
@@ -75,12 +75,17 @@ func (client *Client) Commit() {
     delete(client.peers, value)
   }
 
-  if len(client.wishlist) > 0 && *client.acceptVal == *client.wishlist[0] {
-    // Got our pet value committed!
-    client.wishlist = client.wishlist[1:]
+  // Remove wishes that have been committed:
+  for len(client.wishlist) > 0 {
+    if client.TrimWishlist() {
+      break
+    }
+  }
 
-    if len(client.wishlist) > 0 {
-      // PROPOSE / PETITION our next value
+  if len(client.wishlist) > 0 {
+    go func {
+      time.Sleep(time.Duration(2 * rand.Float32()) * time.Second)
+      client.Propose(client.wishlist[0])
     }
   }
 
@@ -93,7 +98,7 @@ func (client *Client) Commit() {
 
   logstr := "Committed:\n"
   for index, entry := range client.logs {
-    logstr += fmt.Sprintf(" - %4d: %d\n", index, entry)
+    logstr += fmt.Sprintf(" - %4d: %v\n", index, entry)
   }
   client.Log(logstr)
 }
@@ -199,6 +204,17 @@ func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
   }
 }
 
+func (client *Client) Propose(value Value) {
+  client.ballotNum += 1
+  client.Broadcast(&Message {
+    Type:   Message_PROPOSE,
+    Epoch:  client.GetEpoch(),
+    Sender: client.GetID(),
+    Ballot: client.ballotNum,
+    Value:  message.GetValue(),
+  })
+}
+
 func (client *Client) Run() {
   go client.Handle()
   go client.Listen()
@@ -245,4 +261,15 @@ func (client *Client) Send(peerid uint32, message *Message) {
 func (client *Client) Sequence() uint32{
   client.clientSeq += 1
   return client.clientSeq
+}
+
+func (client *Client) TrimWishlist() bool {
+  for _, entry := range client.logs {
+    if *entry == *client.wishlist[0] {
+      client.wishlist = client.wishlist[1:]
+      return false
+    }
+  }
+
+  return true
 }
