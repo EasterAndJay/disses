@@ -1,5 +1,6 @@
 package main
 
+import "fmt"
 import "math/rand"
 import "time"
 
@@ -31,7 +32,7 @@ func (client *Client) HandleACCEPT(message* Message) {
     reply := client.MakeReply(Message_ACCEPTED, message)
     client.Broadcast(reply)
   } else {
-    client.Log("Ignoring ACCEPT: %v", message)
+    // client.Log("Ignoring ACCEPT: %v", message)
   }
 }
 
@@ -57,4 +58,12 @@ func (client *Client) HandleQUERY(message* Message) {
   reply := client.MakeReply(Message_NOTIFY, message)
   reply.Value = client.logs[message.GetEpoch()]
   client.Send(message.GetSender(), reply)
+}
+
+func (client *Client) HandleLOG(message* Message) {
+  logstr := "The log as I see it:\n"
+  for index, entry := range client.logs {
+    logstr += fmt.Sprintf("%4d: %v\n", index, entry)
+  }
+  client.Log(logstr)
 }
