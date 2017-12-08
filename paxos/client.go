@@ -6,6 +6,9 @@ import "math/rand"
 import "net"
 import "time"
 
+const HEARTBEAT_INTERVAL = 1
+const TIMEOUT = 3
+
 type Client struct {
   // Connection Stuff
   port      uint32;
@@ -14,6 +17,7 @@ type Client struct {
   wishlist  []*Value;
 
   // Paxos Stuff
+  leaderID  int32;
   ballotNum uint32;
   acceptNum uint32;
   acceptVal *Value;
@@ -27,6 +31,7 @@ type Client struct {
   promises  map[uint32]map[uint32]bool;
   accepts   map[Value]map[uint32]bool;
   logs      []*Value;
+  heartbeat chan uint32;
 
   // Soccer Stuff
   tickets   uint32;
@@ -39,6 +44,7 @@ func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
     work:      make(chan *Message, 16),
     wishlist:  make([]*Value, 0),
 
+    leaderID:  -1,
     ballotNum: 0,
     acceptNum: 0,
     acceptVal: nil,
@@ -49,7 +55,7 @@ func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
     promises:  make(map[uint32]map[uint32]bool),
     accepts:   make(map[Value]map[uint32]bool),
     logs:      make([]*Value, 0),
-
+    heartbeat: make(chan uint32, 1),
     tickets:   100,
   }
 }
@@ -151,6 +157,8 @@ func (client *Client) Handle() {
         client.HandleNOTIFY(message)
       case Message_QUERY:
         client.HandleQUERY(message)
+      case Message_HEARTBEAT:
+        client.HandleHEARTBEAT(message)
       default:
         client.Log("Unknown message type: %v", message)
       }
@@ -271,4 +279,32 @@ func (client *Client) TrimWishlist() bool {
   }
 
   return true
+}
+
+func (client *Client) Heartbeat() {
+  for {
+    time.Sleep(HEARTBEAT_INTERVAL * time.Second)
+    if client.leaderID != int32(client.GetID()) {
+      return
+    }
+    client.Broadcast(&Message {
+      Type:   Message_HEARTBEAT,
+      Epoch:  client.GetEpoch(),
+      Sender: client.GetID(),
+      Ballot: client.ballotNum,
+      Value:  nil,
+    })
+  }
+}
+
+func (client *Client) StartTimeout() {
+  for {
+    select {
+    case <-client.heartbeat:
+    case <-time.After(time.Second * TIMEOUT):
+        fmt.Println("===== TIMEOUT =====")
+        client.leaderID = -1
+        return
+    }
+  }
 }

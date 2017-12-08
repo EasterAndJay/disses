@@ -4,13 +4,27 @@ func (client *Client) HandlePETITION(message* Message) {
   // INCOMPLETE
   value := message.GetValue()
   client.wishlist = append(client.wishlist, value)
-
-  client.Broadcast(&Message {
-    Type:   Message_PROPOSE,
-    Epoch:  client.GetEpoch(),
-    Ballot: client.ballotNum + 1,
-    Value:  message.GetValue(),
-  })
+  switch client.leaderID {
+  case int32(client.GetID()):
+    // I am leader
+    client.Broadcast(&Message {
+      Type:   Message_PROPOSE,
+      Epoch:  client.GetEpoch(),
+      Ballot: client.ballotNum + 1,
+      Value:  message.GetValue(),
+    })
+  case -1:
+    // No leader
+    client.Broadcast(&Message {
+      Type:   Message_PROPOSE,
+      Epoch:  client.GetEpoch(),
+      Ballot: client.ballotNum + 1,
+      Value:  message.GetValue(),
+    })
+  default:
+    // Someone else is leader
+    client.Send(uint32(client.leaderID), message)
+  }
 }
 
 func (client *Client) HandlePROPOSE(message *Message) {
@@ -50,6 +64,19 @@ func (client *Client) HandlePROMISE(message* Message) {
 
 func (client *Client) HandleACCEPT(message* Message) {
   if message.GetBallot() >= client.ballotNum {
+    if client.leaderID != int32(message.GetSender()) {
+      // New leader
+      if client.GetID() == message.GetSender() {
+        // This client just became leader
+        go client.Heartbeat()
+      }
+      client.leaderID = int32(message.GetSender())
+      if len(client.heartbeat) > 0 {
+        <-client.heartbeat
+      }
+      go client.StartTimeout()
+    }
+
     client.acceptNum = message.GetBallot()
     client.acceptVal = message.GetValue()
 
@@ -84,4 +111,14 @@ func (client *Client) HandleQUERY(message* Message) {
   reply := client.MakeReply(Message_NOTIFY, message)
   reply.Value = client.logs[message.GetEpoch()]
   client.Send(message.GetSender(), reply)
+}
+
+func (client *Client) HandleHEARTBEAT(message* Message) {
+  if(int32(message.GetSender()) == client.leaderID) {
+    select {
+    case client.heartbeat <- 1:
+    default:
+      client.Log("Heartbeat channel full - skipping this heartbeat message")
+    }
+  }
 }

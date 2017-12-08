@@ -3,7 +3,9 @@ package main
 import(
   "fmt"
   "log"
+  "math/rand"
   "net"
+  "os"
   "time"
 )
 
@@ -27,6 +29,7 @@ func runAll(peers map[uint32]*net.UDPAddr) {
 }
 
 func main() {
+  rand.Seed(int64(os.Getpid()))
   clusterSize, id := parseArgs()
   port  := uint32(id + BASE_PORT)
   peers := make(map[uint32]*net.UDPAddr)

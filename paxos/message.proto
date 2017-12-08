@@ -19,14 +19,15 @@ message Value {
 
 message Message {
   enum Type {
-    UNKNOWN  = 0;
-    PETITION = 1;
-    PROPOSE  = 2;
-    PROMISE  = 3;
-    ACCEPT   = 4;
-    ACCEPTED = 5;
-    NOTIFY   = 6;
-    QUERY    = 7;
+    UNKNOWN   = 0;
+    PETITION  = 1;
+    PROPOSE   = 2;
+    PROMISE   = 3;
+    ACCEPT    = 4;
+    ACCEPTED  = 5;
+    NOTIFY    = 6;
+    QUERY     = 7;
+    HEARTBEAT = 8;
   }
 
   Type   type   = 1;
