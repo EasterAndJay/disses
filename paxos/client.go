@@ -67,11 +67,17 @@ func (client *Client) Commit(message *Message) {
 
   switch(entry.GetType()) {
   case Value_BUY:
-    if value < client.tickets {
+    if value <= client.tickets {
       client.tickets -= value
+      if entry.GetClient() == client.GetID() {
+        client.Log("Sold %d tickets: %d remaining.", value, client.tickets)
+      }
+    } else if entry.GetClient() == client.GetID() {
+      client.Log("Can't sell %d tickets: only %d available.", value, client.tickets)
     }
   case Value_SUPPLY:
     client.tickets += value
+    client.Log("Got %d new tickets: now have %d.", value, client.tickets)
   case Value_JOIN:
     client.peers[value] = parseAddr(PEERS_FILE, int(value))
   case Value_LEAVE:
@@ -97,12 +103,6 @@ func (client *Client) Commit(message *Message) {
   client.acceptVal = nil
   client.clientVal = nil
   client.clientNum = 0
-
-  logstr := "Committed:\n"
-  for index, entry := range client.logs {
-    logstr += fmt.Sprintf(" - %4d: %v\n", index, entry)
-  }
-  client.Log(logstr)
 }
 
 func (client *Client) GetEpoch() uint32 {
@@ -116,12 +116,14 @@ func (client *Client) GetID() uint32 {
 func (client *Client) Handle() {
   for {
     message := <-client.work
-    client.Log("Got a message! {%v}", message)
+    // client.Log("Got a message! {%v}", message)
 
     if message.GetEpoch() < client.GetEpoch() {
       switch message.GetType() {
       case Message_PETITION:
         client.HandlePETITION(message)
+      case Message_LOG:
+        client.HandleLOG(message)
       case Message_NOTIFY:
         // Ignore it.
       default:
@@ -155,6 +157,8 @@ func (client *Client) Handle() {
         client.HandleNOTIFY(message)
       case Message_QUERY:
         client.HandleQUERY(message)
+      case Message_LOG:
+        client.HandleLOG(message)
       default:
         client.Log("Unknown message type: %v", message)
       }
@@ -233,7 +237,7 @@ func (client *Client) Run() {
         Type:     Value_BUY,
         Client:   client.GetID(),
         Sequence: client.Sequence(),
-        Value:    uint32(rand.Int31n(10) + 1),
+        Value:    uint32(rand.Int31n(9) + 1),
       },
     })
   }

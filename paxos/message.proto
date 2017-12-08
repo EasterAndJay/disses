@@ -27,6 +27,7 @@ message Message {
     ACCEPTED = 5;
     NOTIFY   = 6;
     QUERY    = 7;
+    LOG      = 8;
   }
 
   Type   type   = 1;
