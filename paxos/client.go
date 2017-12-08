@@ -200,7 +200,7 @@ func (client *Client) Listen() {
 }
 
 func (client *Client) Log(format string, args ...interface{}) {
-  fmt.Printf("%d:  %s\n",  client.port, fmt.Sprintf(format, args...))
+  fmt.Printf("%d @   %-4d  %s\n",  client.port, client.GetEpoch(), fmt.Sprintf(format, args...))
 }
 
 func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
