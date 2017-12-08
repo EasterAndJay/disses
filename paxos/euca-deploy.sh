@@ -2,7 +2,7 @@
 
 IPS=`euca-describe-instances --filter instance-state-name=running | awk '{if (NR % 2 == 0) print $13":"$8+5001}'`
 PRIVATE_KEY="~/.ssh/cs271-6.pem"
-EXECUTABLE="paxos-client"
+EXECUTABLE="client"
 PEERS_FILE="peersRemote.txt"
 echo "ip-port pairs are:"
 echo $IPS
