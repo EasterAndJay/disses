@@ -1,60 +1,35 @@
 package main
 
-func (client *Client) HandlePETITION(message* Message) {
-  // INCOMPLETE
-  value := message.GetValue()
-  client.wishlist = append(client.wishlist, value)
+import "math/rand"
+import "time"
 
+func (client *Client) HandlePETITION(message* Message) {
+  value := message.GetValue()
+  if client.values[*value] {
+    // Already have this one.
+    return
+  }
+
+  go func() {
+    time.Sleep(time.Duration(rand.Float32() * 5) * time.Second)
+    client.Send(client.GetID(), message)
+  }()
+
+  client.acceptNum += 1
   client.Broadcast(&Message {
-    Type:   Message_PROPOSE,
+    Type:   Message_ACCEPT,
     Epoch:  client.GetEpoch(),
-    Ballot: client.ballotNum + 1,
-    Value:  message.GetValue(),
+    Sender: client.GetID(),
+    Ballot: client.acceptNum,
+    Value:  value,
   })
 }
 
-func (client *Client) HandlePROPOSE(message *Message) {
-  if message.GetBallot() > client.ballotNum {
-    client.ballotNum = message.GetBallot()
-
-    reply := client.MakeReply(Message_PROMISE, message)
-    reply.Accept = client.acceptNum
-    reply.Value  = client.acceptVal
-    client.Send(message.GetSender(), reply)
-  } else {
-    client.Log("Ignoring PROPOSE: %v", message)
-  }
-}
-
-func (client *Client) HandlePROMISE(message* Message) {
-  ballotNum := message.GetBallot()
-  acceptNum := message.GetAccept()
-  if _, ok := client.promises[ballotNum]; !ok {
-    client.promises[ballotNum] = make(map[uint32]bool)
-  }
-  client.promises[ballotNum][message.GetSender()] = true
-  if acceptNum > client.clientNum {
-    client.clientVal = message.GetValue()
-    client.clientNum = acceptNum
-  }
-  if len(client.promises[ballotNum]) > len(client.peers) / 2 {
-    if client.clientVal == nil {
-      client.clientVal = client.wishlist[0]
-    }
-
-    reply := client.MakeReply(Message_ACCEPT, message)
-    reply.Value = client.clientVal
-    client.Broadcast(reply)
-  }
-}
-
 func (client *Client) HandleACCEPT(message* Message) {
-  if message.GetBallot() >= client.ballotNum {
+  if message.GetBallot() >= client.acceptNum {
     client.acceptNum = message.GetBallot()
-    client.acceptVal = message.GetValue()
-
     reply := client.MakeReply(Message_ACCEPTED, message)
-    client.Send(message.GetSender(), reply)
+    client.Broadcast(reply)
   } else {
     client.Log("Ignoring ACCEPT: %v", message)
   }
@@ -71,8 +46,6 @@ func (client *Client) HandleACCEPTED(message* Message) {
   okays[message.GetSender()] = true
   if len(okays) > len(client.peers) / 2 {
     client.Commit(message)
-    reply := client.MakeReply(Message_NOTIFY, message)
-    client.Broadcast(reply)
   }
 }
 

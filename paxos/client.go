@@ -11,21 +11,15 @@ type Client struct {
   port      uint32;
   sock      *net.UDPConn;
   work      chan *Message;
-  wishlist  []*Value;
 
   // Paxos Stuff
-  ballotNum uint32;
   acceptNum uint32;
-  acceptVal *Value;
-
   clientVal *Value;
-  clientNum uint32;
-
   clientSeq uint32;
 
   peers     map[uint32]*net.UDPAddr;
-  promises  map[uint32]map[uint32]bool;
   accepts   map[Value]map[uint32]bool;
+  values    map[Value]bool;
   logs      []*Value;
 
   // Soccer Stuff
@@ -37,17 +31,14 @@ func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
     port:      port,
     sock:      nil,
     work:      make(chan *Message, 16),
-    wishlist:  make([]*Value, 0),
 
-    ballotNum: 0,
     acceptNum: 0,
-    acceptVal: nil,
     clientVal: nil,
-    clientNum: 0,
+    clientSeq: 0,
 
     peers:     peers,
-    promises:  make(map[uint32]map[uint32]bool),
     accepts:   make(map[Value]map[uint32]bool),
+    values:    make(map[Value]bool),
     logs:      make([]*Value, 0),
 
     tickets:   100,
@@ -64,6 +55,7 @@ func (client *Client) Commit(message *Message) {
   entry := message.GetValue()
   value := entry.GetValue()
   client.logs = append(client.logs, entry)
+  client.values[*entry] = true
 
   switch(entry.GetType()) {
   case Value_BUY:
@@ -78,25 +70,10 @@ func (client *Client) Commit(message *Message) {
     delete(client.peers, value)
   }
 
-  // Remove wishes that have been committed:
-  for len(client.wishlist) > 0 {
-    if client.TrimWishlist() {
-      break
-    }
-  }
-
-  if len(client.wishlist) > 0 {
-    client.Propose(client.wishlist[0])
-  }
-
   // Clear out the values from the old epoch:
-  client.promises  = make(map[uint32]map[uint32]bool)
   client.accepts   = make(map[Value]map[uint32]bool)
-  client.ballotNum = 0
   client.acceptNum = 0
-  client.acceptVal = nil
   client.clientVal = nil
-  client.clientNum = 0
 
   logstr := "Committed:\n"
   for index, entry := range client.logs {
@@ -139,10 +116,6 @@ func (client *Client) Handle() {
       switch message.GetType() {
       case Message_PETITION:
         client.HandlePETITION(message)
-      case Message_PROPOSE:
-        client.HandlePROPOSE(message)
-      case Message_PROMISE:
-        client.HandlePROMISE(message)
       case Message_ACCEPT:
         client.HandleACCEPT(message)
       case Message_ACCEPTED:
@@ -205,17 +178,6 @@ func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
   }
 }
 
-func (client *Client) Propose(value *Value) {
-  client.ballotNum += 1
-  client.Broadcast(&Message {
-    Type:   Message_PROPOSE,
-    Epoch:  client.GetEpoch(),
-    Sender: client.GetID(),
-    Ballot: client.ballotNum,
-    Value:  value,
-  })
-}
-
 func (client *Client) Run() {
   go client.Handle()
   go client.Listen()
@@ -260,15 +222,4 @@ func (client *Client) Send(peerid uint32, message *Message) {
 func (client *Client) Sequence() uint32{
   client.clientSeq += 1
   return client.clientSeq
-}
-
-func (client *Client) TrimWishlist() bool {
-  for _, entry := range client.logs {
-    if *entry == *client.wishlist[0] {
-      client.wishlist = client.wishlist[1:]
-      return false
-    }
-  }
-
-  return true
 }
