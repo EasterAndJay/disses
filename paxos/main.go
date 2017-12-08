@@ -4,15 +4,33 @@ import(
   "fmt"
   "log"
   "net"
+  "time"
 )
 
 const PEERS_FILE = "peers.txt"
 const BASE_PORT = 5000
 
+func runOne(peers map[uint32]*net.UDPAddr, port uint32) {
+  client := NewClient(port, peers)
+  client.Run()
+}
+
+func runAll(peers map[uint32]*net.UDPAddr) {
+  for id, _ := range peers {
+    client := NewClient(id + BASE_PORT, peers)
+    go client.Run()
+  }
+
+  for {
+    time.Sleep(time.Second)
+  }
+}
+
 func main() {
   clusterSize, id := parseArgs()
-  port := id + BASE_PORT
+  port  := uint32(id + BASE_PORT)
   peers := make(map[uint32]*net.UDPAddr)
+
   ips, err := readLines(PEERS_FILE)
   if err != nil {
     log.Fatal("Error reading configuration file")
@@ -27,6 +45,10 @@ func main() {
       Port: peerPort,
     }
   }
-  client := NewClient(uint32(port), peers)
-  client.Run()
+
+  if id == -1 {
+    runAll(peers)
+  } else {
+    runOne(peers, port)
+  }
 }

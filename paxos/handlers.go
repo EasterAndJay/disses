@@ -38,7 +38,10 @@ func (client *Client) HandlePROMISE(message* Message) {
     client.clientNum = acceptNum
   }
   if len(client.promises[ballotNum]) > len(client.peers) / 2 {
-    //TODO Yay acceptance
+    if client.clientVal == nil {
+      client.clientVal = client.wishlist[0]
+    }
+
     reply := client.MakeReply(Message_ACCEPT, message)
     reply.Value = client.clientVal
     client.Broadcast(reply)
@@ -74,8 +77,6 @@ func (client *Client) HandleACCEPTED(message* Message) {
 }
 
 func (client *Client) HandleNOTIFY(message* Message) {
-  client.acceptNum = message.GetBallot()
-  client.acceptVal = message.GetValue()
   client.Commit(message)
 }
 
