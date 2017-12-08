@@ -127,9 +127,6 @@ func (client *Client) Handle() {
   for {
     message := <-client.work
     // client.Log("Got a message! {%v}", message)
-    if !client.running {
-      return
-    }
 
     if message.GetEpoch() < client.GetEpoch() {
       switch message.GetType() {
@@ -201,10 +198,6 @@ func (client *Client) Listen() {
       continue
     }
 
-    if !client.running {
-      return
-    }
-
     message := new(Message)
     err = proto.Unmarshal(buffer[:n], message)
     if err != nil {
@@ -245,7 +238,7 @@ func (client *Client) Run() {
   go client.Handle()
   go client.Listen()
 
-  for client.running {
+  for {
     time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
     client.Send(client.GetID(), &Message {
       Type:  Message_PETITION,

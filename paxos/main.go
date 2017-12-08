@@ -76,10 +76,6 @@ func main() {
   print  := flag.Bool("log",         false, "Print the log as one client sees it.")
   flag.Parse()
 
-  if *n != 3 && *n != 5 {
-    log.Fatal("Invalid cluster size: ", n)
-  }
-
   ips, err := readLines(PEERS_FILE)
   if err != nil {
     log.Fatal("Error reading configuration file")
