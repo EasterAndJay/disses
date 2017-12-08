@@ -126,8 +126,12 @@ func (client *Client) Handle() {
     // client.Log("Got a message! {%v}", message)
 
     if message.GetEpoch() < client.GetEpoch() {
-      // It's old. Reply with a NOTIFY.
-      if message.GetType() != Message_NOTIFY {
+      switch message.GetType() {
+      case Message_PETITION:
+        client.HandlePETITION(message)
+      case Message_NOTIFY:
+        // Ignore it.
+      default:
         client.Send(message.GetSender(), &Message {
           Type:  Message_NOTIFY,
           Epoch: message.GetEpoch(),
