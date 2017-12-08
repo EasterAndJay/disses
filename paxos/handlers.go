@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 func (client *Client) HandlePETITION(message* Message) {
   // INCOMPLETE
   value := message.GetValue()
@@ -37,7 +39,7 @@ func (client *Client) HandlePROPOSE(message *Message) {
     reply.Value  = client.acceptVal
     client.Send(message.GetSender(), reply)
   } else {
-    client.Log("Ignoring PROPOSE: %v", message)
+    // client.Log("Ignoring PROPOSE: %v", message)
   }
 }
 
@@ -85,7 +87,7 @@ func (client *Client) HandleACCEPT(message* Message) {
     reply := client.MakeReply(Message_ACCEPTED, message)
     client.Send(message.GetSender(), reply)
   } else {
-    client.Log("Ignoring ACCEPT: %v", message)
+    // client.Log("Ignoring ACCEPT: %v", message)
   }
 }
 
@@ -123,4 +125,12 @@ func (client *Client) HandleHEARTBEAT(message* Message) {
       client.Log("Heartbeat channel full - skipping this heartbeat message")
     }
   }
+}
+
+func (client *Client) HandleLOG(message* Message) {
+  logstr := "The log as I see it:\n"
+  for index, entry := range client.logs {
+    logstr += fmt.Sprintf("%4d: %v\n", index, entry)
+  }
+  client.Log(logstr)
 }

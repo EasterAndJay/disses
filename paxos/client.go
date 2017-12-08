@@ -35,6 +35,9 @@ type Client struct {
 
   // Soccer Stuff
   tickets   uint32;
+
+  // Extra
+  running   bool;
 }
 
 func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
@@ -57,6 +60,8 @@ func NewClient(port uint32, peers map[uint32]*net.UDPAddr) Client {
     logs:      make([]*Value, 0),
     heartbeat: make(chan uint32, 1),
     tickets:   100,
+
+    running:   true,
   }
 }
 
@@ -80,11 +85,17 @@ func (client *Client) Commit(message *Message) {
 
   switch(entry.GetType()) {
   case Value_BUY:
-    if value < client.tickets {
+    if value <= client.tickets {
       client.tickets -= value
+      if entry.GetClient() == client.GetID() {
+        client.Log("Sold %d tickets: %d remaining.", value, client.tickets)
+      }
+    } else if entry.GetClient() == client.GetID() {
+      client.Log("Can't sell %d tickets: only %d available.", value, client.tickets)
     }
   case Value_SUPPLY:
     client.tickets += value
+    client.Log("Got %d new tickets: now have %d.", value, client.tickets)
   case Value_JOIN:
     addr, err := parseAddr(PEERS_FILE, value)
     if err != nil {
@@ -93,7 +104,12 @@ func (client *Client) Commit(message *Message) {
     }
     client.peers[value] = addr
   case Value_LEAVE:
+    client.Log("Node %d has left the cluster.", value)
     delete(client.peers, value)
+    if value == client.GetID() {
+      client.Log("Bye now!")
+      client.running = false
+    }
   }
 
   // Remove wishes that have been committed:
@@ -115,13 +131,16 @@ func (client *Client) Commit(message *Message) {
   client.acceptVal = nil
   client.clientVal = nil
   client.clientNum = 0
+// <<<<<<< HEAD
 
-  logstr := "Committed:\n"
-  // for index, entry := range client.logs {
-  //   logstr += fmt.Sprintf(" - %4d: %v\n", index, entry)
-  // }
-  logstr += fmt.Sprintf(" - %4d: %v\n", len(client.logs)-1, entry)
-  client.Log(logstr)
+//   logstr := "Committed:\n"
+//   // for index, entry := range client.logs {
+//   //   logstr += fmt.Sprintf(" - %4d: %v\n", index, entry)
+//   // }
+//   logstr += fmt.Sprintf(" - %4d: %v\n", len(client.logs)-1, entry)
+//   client.Log(logstr)
+// =======
+// >>>>>>> fc498c1e050d3416b9b91e028eea1a303d951f58
 }
 
 func (client *Client) GetEpoch() uint32 {
@@ -136,11 +155,16 @@ func (client *Client) Handle() {
   for {
     message := <-client.work
     // client.Log("Got a message! {%v}", message)
+    if !client.running {
+      return
+    }
 
     if message.GetEpoch() < client.GetEpoch() {
       switch message.GetType() {
       case Message_PETITION:
         client.HandlePETITION(message)
+      case Message_LOG:
+        client.HandleLOG(message)
       case Message_NOTIFY:
         // Ignore it.
       default:
@@ -176,6 +200,8 @@ func (client *Client) Handle() {
         client.HandleQUERY(message)
       case Message_HEARTBEAT:
         client.HandleHEARTBEAT(message)
+      case Message_LOG:
+        client.HandleLOG(message)
       default:
         client.Log("Unknown message type: %v", message)
       }
@@ -205,6 +231,10 @@ func (client *Client) Listen() {
       continue
     }
 
+    if !client.running {
+      return
+    }
+
     message := new(Message)
     err = proto.Unmarshal(buffer[:n], message)
     if err != nil {
@@ -217,7 +247,7 @@ func (client *Client) Listen() {
 }
 
 func (client *Client) Log(format string, args ...interface{}) {
-  fmt.Printf("%d:  %s\n",  client.port, fmt.Sprintf(format, args...))
+  fmt.Printf("%d @   %-4d  %s\n",  client.port, client.GetEpoch(), fmt.Sprintf(format, args...))
 }
 
 func (client *Client) MakeReply(mtype Message_Type, message* Message) *Message {
@@ -269,6 +299,20 @@ func (client *Client) Run(joining bool) {
     //     Value:    uint32(rand.Int31n(10) + 1),
     //   },
     // })
+
+  // for client.running {
+  //   time.Sleep(time.Duration(5 * rand.Float32()) * time.Second)
+  //   client.Send(client.GetID(), &Message {
+  //     Type:  Message_PETITION,
+  //     Epoch: client.GetEpoch(),
+  //     Value: &Value {
+  //       Type:     Value_BUY,
+  //       Client:   client.GetID(),
+  //       Sequence: client.Sequence(),
+  //       Value:    uint32(rand.Int31n(9) + 1),
+  //     },
+  //   })
+  // }
   }
 }
 
@@ -279,6 +323,11 @@ func (client *Client) Send(peerid uint32, message *Message) {
   }
 
   addr := client.peers[peerid]
+  if addr == nil {
+    // No address for this node (yet?)
+    return
+  }
+
   message.Sender = client.GetID()
   buffer, err := proto.Marshal(message)
   if err != nil {

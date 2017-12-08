@@ -28,6 +28,7 @@ message Message {
     NOTIFY    = 6;
     QUERY     = 7;
     HEARTBEAT = 8;
+    LOG       = 9;
   }
 
   Type   type   = 1;
